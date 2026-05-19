@@ -4,12 +4,17 @@ import type {
   CreateEventResponse,
   EventIn,
   EventOut,
+  InboxMessage,
   Mailbox,
   MailboxCalendarsAll,
   MailboxEventsAll,
   Me,
   RsvpPollIn,
   RsvpPollOut,
+  TaskBulkItem,
+  TaskBulkUpsertResult,
+  TaskItem,
+  TaskPatchIn,
 } from "./types";
 
 export class AuthRequiredError extends Error {
@@ -165,4 +170,33 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body || {}),
     }),
+
+  // AI tasks
+  inboxRecent: (opts?: { since_days?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.since_days != null) q.set("since_days", String(opts.since_days));
+    if (opts?.limit != null) q.set("limit", String(opts.limit));
+    const qs = q.toString();
+    return request<InboxMessage[]>(`/api/inbox/recent${qs ? `?${qs}` : ""}`);
+  },
+  listTasks: (opts?: { include_done?: boolean; include_snoozed?: boolean; mailbox_id?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.include_done) q.set("include_done", "true");
+    if (opts?.include_snoozed) q.set("include_snoozed", "true");
+    if (opts?.mailbox_id != null) q.set("mailbox_id", String(opts.mailbox_id));
+    const qs = q.toString();
+    return request<TaskItem[]>(`/api/tasks${qs ? `?${qs}` : ""}`);
+  },
+  bulkUpsertTasks: (items: TaskBulkItem[]) =>
+    request<TaskBulkUpsertResult>("/api/tasks/bulk", {
+      method: "POST",
+      body: JSON.stringify(items),
+    }),
+  patchTask: (id: number, body: TaskPatchIn) =>
+    request<TaskItem>(`/api/tasks/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteTask: (id: number) =>
+    request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
 };

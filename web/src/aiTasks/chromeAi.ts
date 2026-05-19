@@ -17,8 +17,29 @@ export type AiAvailability =
   | "downloading"
   | "available";
 
+export type ChromeAiMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
+export type ChromeAiSession = {
+  prompt(
+    input: string | ChromeAiMessage[],
+    opts?: { responseConstraint?: object; signal?: AbortSignal },
+  ): Promise<string>;
+  destroy(): void;
+};
+
+export type ChromeAiCreateOpts = {
+  initialPrompts?: ChromeAiMessage[];
+  responseConstraint?: object;
+  monitor?: (target: EventTarget) => void;
+  signal?: AbortSignal;
+};
+
 type LanguageModelLike = {
   availability(): Promise<AiAvailability> | AiAvailability;
+  create?(opts?: ChromeAiCreateOpts): Promise<ChromeAiSession>;
 };
 
 declare global {

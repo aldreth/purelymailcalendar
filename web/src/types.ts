@@ -172,6 +172,59 @@ export type AppEvent = EventOut & {
   calendar_name?: string | null;
 };
 
+
+// AI-tasks ---------------------------------------------------------------
+
+export type InboxMessage = {
+  message_uid: string;
+  subject: string;
+  from: string;
+  date?: string | null;
+  body_text: string;
+  truncated: boolean;
+};
+
+export type TaskItem = {
+  id: number;
+  mailbox_id: number;
+  message_uid: string;
+  task_index: number;
+  title: string;
+  due_at?: string | null;
+  owner_email?: string | null;
+  source_subject: string;
+  source_from: string;
+  source_date?: string | null;
+  done_at?: string | null;
+  snoozed_until?: string | null;
+  as_event_uid?: string | null;
+  created_at: string;
+  extracted_at: string;
+};
+
+export type TaskBulkItem = {
+  mailbox_id: number;
+  message_uid: string;
+  task_index: number;
+  title: string;
+  due_at?: string | null;
+  owner_email?: string | null;
+  source_subject: string;
+  source_from: string;
+  source_date?: string | null;
+};
+
+export type TaskBulkUpsertResult = {
+  written: number;
+  items: TaskItem[];
+};
+
+export type TaskPatchIn = {
+  done?: boolean;
+  snoozed_until?: string | null;
+  as_event_uid?: string | null;
+};
+
 export type MailboxEventsAll = {
   events: MailboxEventOut[];
   partial_failures: MailboxFailure[];

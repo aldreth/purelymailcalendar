@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACTIVE_MAILBOX_KEY, api, AuthRequiredError } from "./api";
-import type { AppEvent, CalendarSummary, EventIn, EventOut, Mailbox, Me } from "./types";
+import type { AppEvent, CalendarSummary, EventIn, EventOut, Mailbox, Me, TaskItem } from "./types";
 import type { ActiveMailboxSelection } from "./components/MailboxSwitcher";
 import { Header } from "./components/Header";
 import { EventsView } from "./components/EventsView";
@@ -15,6 +15,7 @@ import { RunningSha } from "./components/RunningSha";
 import { ToastStack, type ToastMsg } from "./components/Toast";
 import { AddMailboxModal } from "./components/AddMailboxModal";
 import { TasksView } from "./components/TasksView";
+import { AiScanModal } from "./components/AiScanModal";
 import { useAiAvailability } from "./aiTasks/useAiAvailability";
 import { addDays, buildMonthGrid, fmtTimeShort, startOfDay, startOfWeek } from "./util";
 import { useReminders } from "./useReminders";
@@ -22,7 +23,17 @@ import { useReminders } from "./useReminders";
 type Tab = "calendar" | "events" | "rsvps" | "tasks";
 type FormState =
   | { open: false }
-  | { open: true; mode: "create"; initial: null; prefillStart?: Date | null; prefillDurationMinutes?: number | null }
+  | {
+      open: true;
+      mode: "create";
+      initial: null;
+      prefillStart?: Date | null;
+      prefillDurationMinutes?: number | null;
+      prefillSummary?: string | null;
+      /** Set when the form was opened from a task. After a successful
+       * create, we stamp `as_event_uid` on that task so it stops nagging. */
+      fromTaskId?: number | null;
+    }
   | { open: true; mode: "edit"; initial: AppEvent };
 
 type Bootstrap =
@@ -200,6 +211,16 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
     if (tab === "tasks" && ai.ready && !ai.supported) setTab("calendar");
   }, [tab, ai.ready, ai.supported]);
 
+  // Tasks state. Loaded the first time the user opens the Tasks tab and
+  // again after a scan completes. Snoozed/done tasks are excluded by
+  // default on the server side.
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  const tasksLoadedRef = useRef(false);
+  // refreshTasks is declared further down once `handle` exists. Hoisting
+  // its dependencies here keeps the rest of the file readable.
+
   // Compute the CalDAV fetch range from the active tab + view state, so the
   // server only returns events that are actually visible. Calendar tab uses
   // the visible grid range; Events tab uses the `now → now+days` window.
@@ -271,6 +292,26 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
     },
     [onAuthLost]
   );
+
+  // Defined here (not where the tasks state is declared) because it
+  // closes over `handle`, which itself depends on `onAuthLost`.
+  const refreshTasks = useCallback(async () => {
+    setTasksLoading(true);
+    try {
+      const out = await handle(() => api.listTasks());
+      if (out) setTasks(out);
+    } finally {
+      setTasksLoading(false);
+    }
+  }, [handle]);
+
+  useEffect(() => {
+    if (tab !== "tasks") return;
+    if (!ai.supported) return;
+    if (tasksLoadedRef.current) return;
+    tasksLoadedRef.current = true;
+    refreshTasks();
+  }, [tab, ai.supported, refreshTasks]);
 
   const refreshEvents = useCallback(async () => {
     setEventsLoading(true);
@@ -463,6 +504,29 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
   };
   const onEditClick = (e: EventOut) => setForm({ open: true, mode: "edit", initial: e });
 
+  /** Open the event form prefilled from a task. Defaults to tomorrow 9am
+   * local when the task has no `due_at`, since Nano's date inference is
+   * unreliable and we don't want to silently drop the task into a random
+   * slot. The user can still adjust before submitting. */
+  const openEventFormForTask = (task: TaskItem) => {
+    let prefillStart: Date;
+    if (task.due_at) {
+      const d = new Date(task.due_at);
+      prefillStart = isNaN(d.getTime()) ? defaultTomorrowMorning() : d;
+    } else {
+      prefillStart = defaultTomorrowMorning();
+    }
+    setForm({
+      open: true,
+      mode: "create",
+      initial: null,
+      prefillStart,
+      prefillDurationMinutes: 60,
+      prefillSummary: task.title,
+      fromTaskId: task.id,
+    });
+  };
+
   const onMoveEvent = async (e: EventOut, newStart: Date) => {
     const newEnd = new Date(newStart.getTime() + durationMinutes(e) * 60000);
     const oldStart = new Date(e.start);
@@ -583,6 +647,8 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
         ? (form.initial as AppEvent).mailbox_id
         : undefined;
     if (mode === "create") {
+      const fromTaskId =
+        form.open && form.mode === "create" ? form.fromTaskId ?? null : null;
       const r = await handle(() => api.createEvent(payload));
       if (!r) return;
       const optimistic = buildOptimisticEvent(payload, r.uid, me);
@@ -596,6 +662,17 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
           ? `Sent invite to ${r.sent_to.length} attendee${r.sent_to.length === 1 ? "" : "s"}.`
           : `Created. UID ${r.uid.slice(0, 16)}…`
       );
+      // If this create was triggered from a task, stamp the resulting
+      // event UID on the task so it stops appearing in the Tasks list.
+      if (fromTaskId != null && !r.dry_run) {
+        try {
+          await handle(() => api.patchTask(fromTaskId, { as_event_uid: r.uid }));
+          setTasks((prev) => prev.filter((t) => t.id !== fromTaskId));
+        } catch {
+          // Non-fatal: event is on the calendar; the task just won't be
+          // auto-cleared. User can mark it done manually.
+        }
+      }
     } else {
       const r = await handle(() =>
         api.updateEvent(uid!, payload, editMailboxId != null ? { mailboxId: editMailboxId } : undefined),
@@ -707,12 +784,46 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
             <TasksView
               status={ai.status}
               mailboxCount={mailboxes.length}
-              onScan={() =>
-                pushToast(
-                  "success",
-                  "Scan flow ships in the next update. Backend and detection are wired up.",
-                )
-              }
+              tasks={tasks}
+              loading={tasksLoading}
+              onScan={() => {
+                // "all" mode has no single source mailbox to scan; bounce
+                // the user to a specific account first.
+                if (allActive || typeof activeMailboxId !== "number") {
+                  pushToast("error", "Pick a single account from the switcher before scanning.");
+                  return;
+                }
+                setScanOpen(true);
+              }}
+              onCreateEvent={(t) => openEventFormForTask(t)}
+              onDone={async (t) => {
+                setTasks((prev) => prev.filter((x) => x.id !== t.id));
+                try {
+                  await handle(() => api.patchTask(t.id, { done: true }));
+                } catch (e: any) {
+                  pushToast("error", e?.message || "could not mark done");
+                  refreshTasks();
+                }
+              }}
+              onSnooze={async (t, days) => {
+                const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+                setTasks((prev) => prev.filter((x) => x.id !== t.id));
+                try {
+                  await handle(() => api.patchTask(t.id, { snoozed_until: until }));
+                } catch (e: any) {
+                  pushToast("error", e?.message || "could not snooze");
+                  refreshTasks();
+                }
+              }}
+              onDismiss={async (t) => {
+                setTasks((prev) => prev.filter((x) => x.id !== t.id));
+                try {
+                  await handle(() => api.deleteTask(t.id));
+                } catch (e: any) {
+                  pushToast("error", e?.message || "could not dismiss");
+                  refreshTasks();
+                }
+              }}
             />
           )}
         </main>
@@ -737,6 +848,7 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
           initial={form.mode === "edit" ? form.initial : null}
           prefillStart={form.mode === "create" ? form.prefillStart ?? null : null}
           prefillDurationMinutes={form.mode === "create" ? form.prefillDurationMinutes ?? null : null}
+          prefillSummary={form.mode === "create" ? form.prefillSummary ?? null : null}
           defaultAccount={me.email}
           defaultCalendar={calendar}
           onClose={() => setForm({ open: false })}
@@ -765,6 +877,22 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
             setEventCounts({});
             setEvents([]);
             pushToast("success", `Connected ${mb.email}.`);
+          }}
+        />
+      )}
+
+      {scanOpen && typeof activeMailboxId === "number" && (
+        <AiScanModal
+          activeMailboxId={activeMailboxId}
+          onClose={() => setScanOpen(false)}
+          onComplete={(written) => {
+            pushToast(
+              "success",
+              written === 0
+                ? "Scan finished. No new tasks found."
+                : `Scan finished. ${written} task${written === 1 ? "" : "s"} found.`,
+            );
+            refreshTasks();
           }}
         />
       )}
@@ -935,6 +1063,13 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 function durationMinutes(e: EventOut): number {
   const ms = new Date(e.end).getTime() - new Date(e.start).getTime();
   return Math.max(15, Math.round(ms / 60000));
+}
+
+function defaultTomorrowMorning(): Date {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  return d;
 }
 
 function toLocalIsoMinute(d: Date): string {

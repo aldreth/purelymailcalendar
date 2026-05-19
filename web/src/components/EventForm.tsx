@@ -88,6 +88,7 @@ type Props = {
   initial?: EventOut | null;
   prefillStart?: Date | null;
   prefillDurationMinutes?: number | null;
+  prefillSummary?: string | null;
   defaultAccount: string;
   defaultCalendar: string;
   onClose: () => void;
@@ -137,8 +138,8 @@ function localFromIso(iso: string): string {
   return toLocalIsoMinute(new Date(iso));
 }
 
-export function EventForm({ mode, initial, prefillStart, prefillDurationMinutes, defaultAccount, defaultCalendar, onClose, onSubmit, onCancelEvent }: Props) {
-  const [summary, setSummary] = useState(initial?.summary || "");
+export function EventForm({ mode, initial, prefillStart, prefillDurationMinutes, prefillSummary, defaultAccount, defaultCalendar, onClose, onSubmit, onCancelEvent }: Props) {
+  const [summary, setSummary] = useState(initial?.summary || prefillSummary || "");
   const [start, setStart] = useState(
     snapToFive(
       initial ? localFromIso(initial.start) : prefillStart ? toLocalIsoMinute(prefillStart) : defaultStart()

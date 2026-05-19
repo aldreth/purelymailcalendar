@@ -1,17 +1,33 @@
 import { useEffect, useRef, useState } from "react";
 import type { AiAvailability } from "../aiTasks/chromeAi";
+import type { TaskItem } from "../types";
+import { TaskRow } from "./TaskRow";
 
 type Props = {
   status: AiAvailability;
   /** Mailboxes currently connected. The Scan button is disabled when
    * there's nothing to scan. */
   mailboxCount: number;
-  /** Triggered by the Scan inbox button. In 2.5b this is a no-op that
-   * surfaces a toast; the full extract flow ships in 2.5c. */
+  tasks: TaskItem[];
+  loading: boolean;
   onScan: () => void;
+  onCreateEvent: (task: TaskItem) => void;
+  onDone: (task: TaskItem) => void;
+  onSnooze: (task: TaskItem, days: 1 | 3 | 7) => void;
+  onDismiss: (task: TaskItem) => void;
 };
 
-export function TasksView({ status, mailboxCount, onScan }: Props) {
+export function TasksView({
+  status,
+  mailboxCount,
+  tasks,
+  loading,
+  onScan,
+  onCreateEvent,
+  onDone,
+  onSnooze,
+  onDismiss,
+}: Props) {
   const [howOpen, setHowOpen] = useState(false);
   const howRef = useRef<HTMLDivElement>(null);
 
@@ -92,25 +108,42 @@ export function TasksView({ status, mailboxCount, onScan }: Props) {
         </div>
       </header>
 
-      <div className="rounded-lg border border-dashed border-accent-900/20 bg-white px-6 py-10 text-center">
-        <p className="font-serif text-lg text-accent-900">No tasks yet.</p>
-        <p className="mx-auto mt-2 max-w-md text-sm text-ink-600">
-          Click <span className="font-medium text-ink-800">Scan inbox</span> above and we'll
-          walk the last two weeks of mail for action items. You can mark each one done,
-          snooze it, or turn it into a calendar event.
-        </p>
-        {status === "downloadable" && (
-          <p className="mt-3 text-xs text-ink-500">
-            First-time use downloads the on-device model (around 3 GB). Chrome handles the
-            download; subsequent scans are fast.
+      {tasks.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-accent-900/20 bg-white px-6 py-10 text-center">
+          <p className="font-serif text-lg text-accent-900">
+            {loading ? "Loading..." : "No tasks yet."}
           </p>
-        )}
-        {status === "downloading" && (
-          <p className="mt-3 text-xs text-ink-500">
-            The on-device model is still downloading. Try again in a minute.
+          <p className="mx-auto mt-2 max-w-md text-sm text-ink-600">
+            Click <span className="font-medium text-ink-800">Scan inbox</span> above and we'll
+            walk the last two weeks of mail for action items. You can mark each one done,
+            snooze it, or turn it into a calendar event.
           </p>
-        )}
-      </div>
+          {status === "downloadable" && (
+            <p className="mt-3 text-xs text-ink-500">
+              First-time use downloads the on-device model (around 3 GB). Chrome handles the
+              download; subsequent scans are fast.
+            </p>
+          )}
+          {status === "downloading" && (
+            <p className="mt-3 text-xs text-ink-500">
+              The on-device model is still downloading. Try again in a minute.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {tasks.map((t) => (
+            <TaskRow
+              key={t.id}
+              task={t}
+              onCreateEvent={onCreateEvent}
+              onDone={onDone}
+              onSnooze={onSnooze}
+              onDismiss={onDismiss}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
