@@ -74,6 +74,14 @@ def _startup() -> None:
         "CREATE INDEX IF NOT EXISTS ix_scheduled_reminders_mailbox_id ON scheduled_reminders (mailbox_id)",
         # All-accounts overlay (phase 2a): user-pickable hex color per mailbox.
         "ALTER TABLE mailboxes ADD COLUMN IF NOT EXISTS color VARCHAR(16)",
+        # AI-extracted tasks (feat/ai-tasks): nothing here yet besides
+        # create_all picking up the new table. The unique index is enforced
+        # by SQLAlchemy when create_all runs against a fresh DB; explicit
+        # CREATE keeps existing Postgres deployments in sync.
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_task_items_source ON task_items (user_id, mailbox_id, message_uid, task_index)",
+        "CREATE INDEX IF NOT EXISTS ix_task_items_user_id ON task_items (user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_task_items_mailbox_id ON task_items (mailbox_id)",
+        "CREATE INDEX IF NOT EXISTS ix_task_items_done_at ON task_items (done_at)",
     ]
     with engine.begin() as conn:
         for s in stmts:
@@ -88,6 +96,8 @@ app.include_router(mailbox_router)
 app.include_router(reminders_router)
 from .admin import router as admin_router  # noqa: E402  (intentional late import)
 app.include_router(admin_router)
+from .tasks import router as tasks_router  # noqa: E402  (intentional late import)
+app.include_router(tasks_router)
 
 
 def _creds(mb: Mailbox) -> services.MailboxCreds:

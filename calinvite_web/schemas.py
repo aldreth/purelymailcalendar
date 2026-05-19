@@ -181,3 +181,64 @@ class MailboxEventOut(EventOut):
 class MailboxEventsAllOut(BaseModel):
     events: List[MailboxEventOut]
     partial_failures: List[MailboxFailureOut] = []
+
+
+# ---------------------------------------------------------------------------
+# AI-tasks (feat/ai-tasks)
+# ---------------------------------------------------------------------------
+
+
+class InboxMessageOut(BaseModel):
+    """Trimmed read-only view of one email, returned by /api/inbox/recent."""
+    message_uid: str
+    subject: str
+    from_: str = Field(alias="from")
+    date: Optional[datetime] = None
+    body_text: str = ""
+    truncated: bool = False
+
+    model_config = {"populate_by_name": True}
+
+
+class TaskItemIn(BaseModel):
+    """Shape the client posts per extracted task in /api/tasks/bulk."""
+    mailbox_id: int
+    message_uid: str
+    task_index: int = Field(ge=0, le=20)
+    title: str = Field(min_length=1, max_length=500)
+    due_at: Optional[datetime] = None
+    owner_email: Optional[str] = Field(default=None, max_length=254)
+    source_subject: str = Field(default="", max_length=500)
+    source_from: str = Field(default="", max_length=254)
+    source_date: Optional[datetime] = None
+
+
+class TaskItemOut(BaseModel):
+    id: int
+    mailbox_id: int
+    message_uid: str
+    task_index: int
+    title: str
+    due_at: Optional[datetime] = None
+    owner_email: Optional[str] = None
+    source_subject: str = ""
+    source_from: str = ""
+    source_date: Optional[datetime] = None
+    done_at: Optional[datetime] = None
+    snoozed_until: Optional[datetime] = None
+    as_event_uid: Optional[str] = None
+    created_at: datetime
+    extracted_at: datetime
+
+
+class TaskItemPatchIn(BaseModel):
+    """Partial-update payload for /api/tasks/{id}. Only fields under user
+    control are exposed; the source metadata is immutable post-extraction."""
+    done: Optional[bool] = None
+    snoozed_until: Optional[datetime] = None
+    as_event_uid: Optional[str] = Field(default=None, max_length=255)
+
+
+class TaskBulkUpsertOut(BaseModel):
+    written: int
+    items: List[TaskItemOut]

@@ -953,3 +953,22 @@ def poll_rsvps(creds: MailboxCreds, inp: RsvpPollIn) -> RsvpPollOut:
             for r in results
         ],
     )
+
+
+def list_recent_inbox(
+    creds: MailboxCreds,
+    *,
+    since_days: int = 14,
+    limit: int = 50,
+) -> List[invites_mod.InboxMessage]:
+    """Read-only recent-emails listing for the AI-tasks scanner. Wraps the
+    `invites_mod.list_recent_messages` helper with this mailbox's creds and
+    keeps the seen flag untouched."""
+    return invites_mod.list_recent_messages(
+        imap_host=creds.imap_host,
+        imap_port=creds.imap_port,
+        imap_user=creds.email,
+        imap_pass=creds.password,
+        since_days=since_days,
+        limit=limit,
+    )
