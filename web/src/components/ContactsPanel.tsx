@@ -112,10 +112,7 @@ export function ContactsPanel({ onClose, activeMailbox }: Props) {
       <div className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col bg-accent-50 shadow-xl">
         <div className="flex items-baseline justify-between border-b border-accent-900/30 px-6 py-5">
           <div>
-            <p className="font-serif text-[11px] uppercase tracking-[0.25em] text-accent-700">
-              Volume i · Address book
-            </p>
-            <h2 className="mt-1 font-serif text-2xl text-accent-900">Contacts</h2>
+            <h2 className="font-serif text-2xl text-accent-900">Contacts</h2>
             <p className="mt-1 text-xs text-ink-600">
               {activeMailbox ? activeMailbox.email : "no mailbox"} · last synced {formatRelative(lastSyncedAt)}
             </p>

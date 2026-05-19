@@ -273,10 +273,7 @@ export function EventForm({ mode, initial, prefillStart, prefillDurationMinutes,
       >
         <div className="flex items-baseline justify-between border-b border-accent-900/30 px-6 py-5">
           <div>
-            <p className="font-serif text-[11px] uppercase tracking-[0.25em] text-accent-700">
-              {mode === "edit" ? "Volume i · Revision" : "Volume i · Filing"}
-            </p>
-            <h2 className="mt-1 font-serif text-2xl text-accent-900">
+            <h2 className="font-serif text-2xl text-accent-900">
               {mode === "edit" ? "Edit event" : "New event"}
             </h2>
           </div>
