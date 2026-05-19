@@ -113,7 +113,7 @@ export function LoginView() {
             <div className="relative flex h-full flex-col justify-between p-10 text-white">
               <div>
                 <p className="text-[10px] font-medium uppercase tracking-[0.25em] text-white/85">
-                  Volume i &middot; Sign in
+                  Sign in
                 </p>
                 <h2 className="mt-3 max-w-xs text-3xl font-semibold leading-tight">
                   A calendar for the{" "}

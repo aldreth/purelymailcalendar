@@ -63,10 +63,7 @@ export function OnboardingView({ me, onConnected, onLogout }: Props) {
         </div>
 
         <section className="pt-10 sm:pt-14">
-          <p className="font-serif text-xs uppercase tracking-[0.25em] text-accent-700">
-            Volume i &middot; Setup
-          </p>
-          <h1 className="mt-3 font-serif text-4xl leading-tight text-accent-900 sm:text-5xl">
+          <h1 className="font-serif text-4xl leading-tight text-accent-900 sm:text-5xl">
             Connect your <span className="italic">Purelymail</span> mailbox.
           </h1>
           <p className="mt-5 max-w-prose font-serif text-lg italic text-ink-700">

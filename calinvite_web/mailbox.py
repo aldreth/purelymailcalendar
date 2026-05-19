@@ -52,6 +52,7 @@ class MailboxOut(BaseModel):
     selected_calendar: Optional[str] = None
     color: Optional[str] = None
     last_scanned_at: Optional[datetime] = None
+    last_contacts_synced_at: Optional[datetime] = None
 
 
 def _discover_account_id(email: str, password: str) -> str:
@@ -93,6 +94,7 @@ def _to_out(mb: Mailbox) -> MailboxOut:
         selected_calendar=mb.selected_calendar,
         color=mb.color,
         last_scanned_at=mb.last_scanned_at,
+        last_contacts_synced_at=mb.last_contacts_synced_at,
     )
 
 

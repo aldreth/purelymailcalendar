@@ -14,6 +14,7 @@ export type Mailbox = {
   selected_calendar?: string | null;
   color?: string | null;
   last_scanned_at?: string | null;
+  last_contacts_synced_at?: string | null;
 };
 
 export type MailboxFailure = {
@@ -229,4 +230,33 @@ export type TaskPatchIn = {
 export type MailboxEventsAll = {
   events: MailboxEventOut[];
   partial_failures: MailboxFailure[];
+};
+
+
+// Contacts (feat/contacts) ----------------------------------------------
+
+export type Contact = {
+  id: number;
+  mailbox_id: number;
+  vcard_uid: string;
+  full_name: string;
+  primary_email?: string | null;
+  emails: string[];
+  org?: string | null;
+  source_book: string;
+  last_synced_at: string;
+};
+
+export type ContactSyncResult = {
+  upserted: number;
+  deleted: number;
+  books: string[];
+  last_synced_at: string;
+  throttled: boolean;
+};
+
+export type ContactFromEventResult = {
+  added: number;
+  skipped: number;
+  errors: number;
 };

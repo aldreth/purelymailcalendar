@@ -14,9 +14,11 @@ import { UnofficialNote } from "./components/UnofficialNote";
 import { RunningSha } from "./components/RunningSha";
 import { ToastStack, type ToastMsg } from "./components/Toast";
 import { AddMailboxModal } from "./components/AddMailboxModal";
+import { ContactsPanel } from "./components/ContactsPanel";
 import { TasksView, type ScanRange } from "./components/TasksView";
 import { AiScanModal } from "./components/AiScanModal";
 import { useAiAvailability } from "./aiTasks/useAiAvailability";
+import { resetContactsSyncCheckpoint } from "./contacts/useContacts";
 import { addDays, buildMonthGrid, fmtTimeShort, startOfDay, startOfWeek } from "./util";
 import { useReminders } from "./useReminders";
 
@@ -137,9 +139,15 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
     } catch {
       // private mode; non-fatal
     }
+    // The contact cache is per-mailbox on the server, but the hook keeps a
+    // process-wide "last synced" checkpoint to throttle sync-on-open. Clear
+    // it on every flip so the next event-form open re-syncs against the
+    // newly-active mailbox.
+    resetContactsSyncCheckpoint();
   }, []);
   const allActive = activeMailboxId === "all";
   const [showAddMailbox, setShowAddMailbox] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
 
   const [calendars, setCalendars] = useState<CalendarSummary[]>([]);
   const [calendar, setCalendarState] = useState<string>(
@@ -682,6 +690,22 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
           // auto-cleared. User can mark it done manually.
         }
       }
+      // Best-effort: drop any new invitees into the automaticallyCollected
+      // address book so they show up next time the user types. Mirrors
+      // Purelymail webmail's behavior. Failures here never block the create
+      // path; the event is already on CalDAV.
+      if (!r.dry_run && payload.attendees && payload.attendees.length > 0) {
+        api
+          .contactsFromEvent(
+            payload.attendees.map((a) => ({
+              email: a.email,
+              name: a.name || undefined,
+            })),
+          )
+          .catch(() => {
+            /* silent */
+          });
+      }
     } else {
       const r = await handle(() =>
         api.updateEvent(uid!, payload, editMailboxId != null ? { mailboxId: editMailboxId } : undefined),
@@ -698,6 +722,19 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
           ? `Update sent to ${r.sent_to.length} attendee${r.sent_to.length === 1 ? "" : "s"}.`
           : `Updated.`
       );
+      if (!r.dry_run && payload.attendees && payload.attendees.length > 0) {
+        api
+          .contactsFromEvent(
+            payload.attendees.map((a) => ({
+              email: a.email,
+              name: a.name || undefined,
+            })),
+            editMailboxId != null ? { mailboxId: editMailboxId } : undefined,
+          )
+          .catch(() => {
+            /* silent */
+          });
+      }
     }
     refreshEvents();
   };
@@ -740,6 +777,7 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
         onLogout={onSignOut}
         onSyncInvites={allActive ? undefined : onSyncInvites}
         syncingInvites={syncingInvites}
+        onShowContacts={allActive ? undefined : () => setShowContacts(true)}
       />
 
       <div className="mx-auto max-w-6xl px-4">
@@ -891,6 +929,17 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
             setEvents([]);
             pushToast("success", `Connected ${mb.email}.`);
           }}
+        />
+      )}
+
+      {showContacts && (
+        <ContactsPanel
+          onClose={() => setShowContacts(false)}
+          activeMailbox={
+            typeof activeMailboxId === "number"
+              ? mailboxes.find((m) => m.id === activeMailboxId) || null
+              : null
+          }
         />
       )}
 

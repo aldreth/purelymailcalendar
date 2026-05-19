@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { EventIn, EventOut, RecurrenceFreq, RecurrenceIn, ReminderIn } from "../types";
 import { toLocalIsoMinute } from "../util";
+import { ContactAutocomplete } from "./ContactAutocomplete";
 
 type RepeatEnd = "never" | "on" | "after";
 type RepeatRow = {
@@ -272,10 +273,7 @@ export function EventForm({ mode, initial, prefillStart, prefillDurationMinutes,
       >
         <div className="flex items-baseline justify-between border-b border-accent-900/30 px-6 py-5">
           <div>
-            <p className="font-serif text-[11px] uppercase tracking-[0.25em] text-accent-700">
-              {mode === "edit" ? "Volume i · Revision" : "Volume i · Filing"}
-            </p>
-            <h2 className="mt-1 font-serif text-2xl text-accent-900">
+            <h2 className="font-serif text-2xl text-accent-900">
               {mode === "edit" ? "Edit event" : "New event"}
             </h2>
           </div>
@@ -437,28 +435,17 @@ export function EventForm({ mode, initial, prefillStart, prefillDurationMinutes,
               </div>
               <div className="flex flex-col gap-2">
                 {attendees.map((row, i) => (
-                  <div key={i} className="grid grid-cols-12 gap-2">
-                    <input
-                      className="field col-span-6"
-                      placeholder="email@example.com"
-                      value={row.email}
-                      onChange={(e) => updateAttendee(i, { email: e.target.value })}
-                    />
-                    <input
-                      className="field col-span-5"
-                      placeholder="Name (optional)"
-                      value={row.name}
-                      onChange={(e) => updateAttendee(i, { name: e.target.value })}
-                    />
-                    <button
-                      type="button"
-                      className="btn-secondary col-span-1"
-                      onClick={() => removeAttendee(i)}
-                      aria-label="remove"
-                    >
-                      ×
-                    </button>
-                  </div>
+                  <ContactAutocomplete
+                    key={i}
+                    email={row.email}
+                    name={row.name}
+                    onChange={(patch) => updateAttendee(i, patch)}
+                    onRemove={() => removeAttendee(i)}
+                    alreadyAdded={attendees
+                      .filter((_, idx) => idx !== i)
+                      .map((a) => a.email)
+                      .filter(Boolean)}
+                  />
                 ))}
               </div>
             </div>
