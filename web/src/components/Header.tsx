@@ -61,11 +61,13 @@ export function Header({
       <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
         <div className="flex items-center gap-3">
           <img src="/logo.png" alt="" className="h-8 w-8" />
-          <span className="font-serif text-lg text-accent-900">Purelymail Calendar</span>
+          <div className="flex flex-col leading-tight">
+            <span className="font-serif text-lg text-accent-900">Purelymail Calendar</span>
+            <span className="hidden font-serif text-[11px] italic text-accent-900/70 md:inline">
+              {todayLabel}
+            </span>
+          </div>
         </div>
-        <span className="hidden font-serif text-xs italic text-accent-900/70 md:inline">
-          {todayLabel}
-        </span>
         <div className="flex-1" />
         <div className="flex items-center gap-3">
           {mailboxes.length > 0 && (

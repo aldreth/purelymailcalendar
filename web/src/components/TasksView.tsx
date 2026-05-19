@@ -39,82 +39,63 @@ export function TasksView({
 
   return (
     <section>
-      <header className="mb-6 border-b border-accent-900/20 pb-5">
-        <p className="font-serif text-xs uppercase tracking-[0.25em] text-accent-700">
+      <header className="mb-4">
+        <p className="font-serif text-[10px] uppercase tracking-[0.25em] text-accent-700">
           Beta &middot; Chrome desktop only
         </p>
-        <h1 className="mt-1 font-serif text-3xl text-accent-900">Tasks from your inbox</h1>
-        <p className="mt-2 max-w-prose text-sm text-ink-700">
-          Chrome's built-in AI reads your recent mail and pulls out things that look like
-          action items. You decide what to do with each one: block time on your calendar,
-          mark it done, snooze it, or dismiss it.
-        </p>
+        <h1 className="mt-0.5 font-serif text-2xl text-accent-900">Tasks from your inbox</h1>
+        <details className="group mt-1.5">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[11px] text-accent-700 underline-offset-2 marker:hidden hover:underline [&::-webkit-details-marker]:hidden">
+            <svg
+              width="9"
+              height="9"
+              viewBox="0 0 12 12"
+              aria-hidden
+              className="transition-transform group-open:rotate-90"
+            >
+              <path
+                d="M4 2l4 4-4 4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Why should I trust this?
+          </summary>
+          <div className="mt-2 max-w-prose rounded-md border border-accent-700/15 bg-accent-50/60 px-4 py-3 text-xs leading-relaxed text-ink-700">
+            <p>
+              This feature runs <strong className="font-semibold text-ink-900">end-to-end on your computer</strong>.
+              The email text <strong className="font-semibold text-ink-900">never leaves your browser</strong>,
+              and nothing is sent to a remote AI service.
+            </p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              <li>
+                Recent emails are pulled from Purelymail's IMAP server{" "}
+                <strong className="font-semibold text-ink-900">straight into your browser</strong>.
+                Your inbox stays unread; we don't touch the seen flag.
+              </li>
+              <li>
+                Extraction runs on <strong className="font-semibold text-ink-900">Gemini Nano</strong>,
+                the on-device model Chrome ships. The model{" "}
+                <strong className="font-semibold text-ink-900">lives on your machine</strong>.
+                No email text is sent to Google, OpenAI, Anthropic, or any other LLM provider.
+              </li>
+              <li>
+                Only the <strong className="font-semibold text-ink-900">task title, optional due date, and source subject line</strong> are
+                stored on the server. The <strong className="font-semibold text-ink-900">full email body is never persisted</strong>.
+              </li>
+              <li>
+                Action items are tied to your account so they survive a refresh and follow you across devices.
+                Mark them done, snooze, or dismiss at any time; <strong className="font-semibold text-ink-900">deletion is permanent</strong>.
+              </li>
+            </ul>
+          </div>
+        </details>
       </header>
 
-      <details className="group mb-6 rounded-lg border border-accent-700/20 bg-accent-50/60 open:bg-accent-50/80">
-        <summary className="flex cursor-pointer list-none items-center gap-2 px-5 py-3 text-sm font-medium text-accent-900 marker:hidden [&::-webkit-details-marker]:hidden">
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            aria-hidden
-            className="text-accent-700 transition-transform group-open:rotate-90"
-          >
-            <path
-              d="M4 2l4 4-4 4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          Why should I trust this?
-        </summary>
-        <div className="border-t border-accent-700/15 px-5 py-4">
-          <h2 className="font-serif text-base font-semibold text-accent-900">
-            Where your data lives
-          </h2>
-          <p className="mt-2 text-sm leading-relaxed text-ink-700">
-            This feature runs end-to-end on your computer. The email text never leaves
-            your browser, and nothing is sent to a remote AI service.
-          </p>
-          <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-ink-700">
-            <li>
-              Recent emails are pulled from Purelymail's IMAP server straight into your
-              browser. Your inbox stays unread; we don't touch the seen flag.
-            </li>
-            <li>
-              Extraction runs on{" "}
-              <span className="font-medium text-ink-900">Gemini Nano</span>, the on-device
-              model Chrome ships. The model lives on your machine. No email text is sent
-              to Google, OpenAI, Anthropic, or any other LLM provider.
-            </li>
-            <li>
-              Only what's needed to render the task list is stored on the server: the
-              extracted task title, optional due date, and the source subject line. The
-              full email body is never persisted.
-            </li>
-            <li>
-              Action items are tied to your account, so they survive a refresh and follow
-              you across devices. You can mark them done, snooze, or dismiss them at any
-              time; deletion is permanent.
-            </li>
-          </ul>
-        </div>
-      </details>
-
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-ink-900">
-            {tasks.length === 0
-              ? "No tasks pulled yet."
-              : `${tasks.length} task${tasks.length === 1 ? "" : "s"}`}
-          </p>
-          <p className="text-xs text-ink-500">
-            Fetch scans the last 14 days of mail in the active mailbox.
-          </p>
-        </div>
+      <div className="mb-5">
         <button
           type="button"
           onClick={onScan}
@@ -130,32 +111,24 @@ export function TasksView({
         >
           {scanLabel}
         </button>
+        {status === "downloadable" && (
+          <p className="mt-2 text-xs text-ink-500">
+            First-time use downloads the on-device model (around 3 GB). Chrome handles the
+            download; future scans skip this step.
+          </p>
+        )}
+        {status === "downloading" && (
+          <p className="mt-2 text-xs text-ink-500">
+            The on-device model is still downloading. Try again in a minute.
+          </p>
+        )}
       </div>
 
-      {status === "downloadable" && (
-        <p className="mb-4 text-xs text-ink-500">
-          First-time use downloads the on-device model (around 3 GB). Chrome handles the
-          download; future scans skip this step.
-        </p>
-      )}
-      {status === "downloading" && (
-        <p className="mb-4 text-xs text-ink-500">
-          The on-device model is still downloading. Try again in a minute.
-        </p>
+      {loading && tasks.length === 0 && (
+        <p className="text-sm text-ink-500">Loading...</p>
       )}
 
-      {tasks.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-accent-900/20 bg-white px-6 py-10 text-center">
-          <p className="font-serif text-lg text-accent-900">
-            {loading ? "Loading..." : "Nothing in your inbox yet."}
-          </p>
-          <p className="mx-auto mt-2 max-w-md text-sm text-ink-600">
-            Click <span className="font-medium text-ink-800">Fetch tasks</span> above and
-            we'll walk the last two weeks of mail for action items. Each one can be
-            blocked straight onto your calendar.
-          </p>
-        </div>
-      ) : (
+      {tasks.length > 0 && (
         <div className="flex flex-col gap-2">
           {tasks.map((t) => (
             <TaskRow
