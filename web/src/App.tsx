@@ -14,10 +14,12 @@ import { UnofficialNote } from "./components/UnofficialNote";
 import { RunningSha } from "./components/RunningSha";
 import { ToastStack, type ToastMsg } from "./components/Toast";
 import { AddMailboxModal } from "./components/AddMailboxModal";
+import { TasksView } from "./components/TasksView";
+import { useAiAvailability } from "./aiTasks/useAiAvailability";
 import { addDays, buildMonthGrid, fmtTimeShort, startOfDay, startOfWeek } from "./util";
 import { useReminders } from "./useReminders";
 
-type Tab = "calendar" | "events" | "rsvps";
+type Tab = "calendar" | "events" | "rsvps" | "tasks";
 type FormState =
   | { open: false }
   | { open: true; mode: "create"; initial: null; prefillStart?: Date | null; prefillDurationMinutes?: number | null }
@@ -185,6 +187,18 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
   const [form, setForm] = useState<FormState>({ open: false });
   const [cancelChoice, setCancelChoice] = useState<EventOut | null>(null);
   const [syncingInvites, setSyncingInvites] = useState(false);
+
+  // Browser-side LLM availability for the Tasks tab. The probe runs once
+  // on mount and again when the page becomes visible; the Tasks tab and
+  // its TabButton render only when the user has Chrome's Built-in AI
+  // and is not on a touch-first device.
+  const ai = useAiAvailability();
+  // If the user was on the Tasks tab and the AI status flips to
+  // unavailable (e.g. they switched browsers in the same session), drop
+  // them back to the calendar instead of stranding them on a hidden tab.
+  useEffect(() => {
+    if (tab === "tasks" && ai.ready && !ai.supported) setTab("calendar");
+  }, [tab, ai.ready, ai.supported]);
 
   // Compute the CalDAV fetch range from the active tab + view state, so the
   // server only returns events that are actually visible. Calendar tab uses
@@ -648,6 +662,9 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
           <TabButton active={tab === "calendar"} onClick={() => setTab("calendar")}>Calendar</TabButton>
           <TabButton active={tab === "events"} onClick={() => setTab("events")}>Events</TabButton>
           <TabButton active={tab === "rsvps"} onClick={() => setTab("rsvps")}>RSVPs</TabButton>
+          {ai.ready && ai.supported && (
+            <TabButton active={tab === "tasks"} onClick={() => setTab("tasks")}>Tasks</TabButton>
+          )}
         </nav>
 
         <main className="py-5">
@@ -684,6 +701,18 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
               calendar={calendar}
               onError={(m) => pushToast("error", m)}
               onSuccess={(m) => pushToast("success", m)}
+            />
+          )}
+          {tab === "tasks" && ai.supported && (
+            <TasksView
+              status={ai.status}
+              mailboxCount={mailboxes.length}
+              onScan={() =>
+                pushToast(
+                  "success",
+                  "Scan flow ships in the next update. Backend and detection are wired up.",
+                )
+              }
             />
           )}
         </main>
