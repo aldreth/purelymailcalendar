@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#e94b35" />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="Yashesh Bharti" />
+
+    <title>Private by design: Purelymail Calendar Blog</title>
+    <meta
+      name="description"
+      content="Most 'AI in your inbox' tools quietly ship your email to a cloud language model. Purelymail Calendar doesn't. Here's why we ran an LLM inside the browser instead, and why we think it's the shape personal AI should take."
+    />
+    <meta
+      name="keywords"
+      content="on-device AI, private AI, Chrome Built-in AI, Gemini Nano, email privacy, LLM training data, personal AI, local language model, inbox AI"
+    />
+
+    <link rel="canonical" href="https://purelymailcalendar.com/blog/private-by-design-ai" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap"
+      rel="stylesheet"
+    />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Purelymail Calendar" />
+    <meta property="og:title" content="Private by design: why your inbox should never train someone else's model" />
+    <meta
+      property="og:description"
+      content="The on-device AI bet, and why personal data should stop being a feedstock for someone else's product."
+    />
+    <meta property="og:url" content="https://purelymailcalendar.com/blog/private-by-design-ai" />
+    <meta property="og:image" content="https://purelymailcalendar.com/logo.png" />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Private by design" />
+    <meta name="twitter:description" content="Why we ran the LLM in the browser, not in the cloud." />
+    <meta name="twitter:image" content="https://purelymailcalendar.com/logo.png" />
+
+    <style>
+      :root {
+        --ink-500: #64748b;
+        --ink-600: #475569;
+        --ink-700: #334155;
+        --ink-800: #1e293b;
+        --ink-900: #0f172a;
+        --paper:   #ffffff;
+        --paper-2: #f5f5f5;
+        --coral-light: #ff6b5a;
+        --coral:   #e94b35;
+        --coral-dark: #7a1f14;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-weight: 500;
+        background: #ffffff;
+        color: #000000;
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      header.site {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 24px 24px 12px;
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        border-bottom: 1px solid rgba(122, 31, 20, 0.3);
+      }
+      header.site a.brand {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 20px;
+        font-weight: 500;
+        color: var(--coral-dark);
+        text-decoration: none;
+      }
+      header.site nav {
+        margin-left: auto;
+        display: flex;
+        gap: 20px;
+        align-items: baseline;
+      }
+      header.site nav a {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 12px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: rgba(122, 31, 20, 0.7);
+        text-decoration: none;
+      }
+      header.site nav a:hover { color: var(--coral-dark); }
+      header.site nav a.cta {
+        color: #fff;
+        background: var(--coral);
+        padding: 6px 12px;
+        border-radius: 4px;
+        letter-spacing: 0.08em;
+      }
+      header.site nav a.cta:hover { background: var(--coral-dark); }
+
+      main {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 48px 24px 64px;
+      }
+      .eyebrow {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.25em;
+        color: var(--coral);
+        margin-bottom: 14px;
+      }
+      .meta {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-style: italic;
+        font-size: 13px;
+        color: var(--ink-600);
+        margin-top: 4px;
+        margin-bottom: 36px;
+      }
+      h1 {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 52px;
+        line-height: 1.05;
+        font-weight: 500;
+        color: var(--coral-dark);
+        margin: 0 0 12px;
+        letter-spacing: -0.01em;
+      }
+      h1 em { font-style: italic; }
+      .lede {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 22px;
+        line-height: 1.45;
+        font-style: italic;
+        color: var(--ink-700);
+        margin: 0 0 48px;
+        max-width: 36em;
+      }
+      .lede strong {
+        font-style: normal;
+        font-weight: 500;
+        color: var(--coral-dark);
+      }
+      h2 {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 28px;
+        line-height: 1.2;
+        font-weight: 500;
+        color: var(--coral-dark);
+        margin: 56px 0 14px;
+      }
+      p {
+        margin: 0 0 18px;
+        font-size: 17px;
+      }
+      blockquote {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 20px;
+        font-style: italic;
+        color: var(--coral-dark);
+        border-left: 3px solid var(--coral);
+        margin: 24px 0;
+        padding: 4px 0 4px 20px;
+      }
+      a { color: var(--coral); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+      a:hover { color: var(--coral-dark); }
+      code {
+        background: var(--paper-2);
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 0.9em;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      .ornament {
+        text-align: center;
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 22px;
+        color: var(--coral);
+        margin: 40px 0 24px;
+        letter-spacing: 0.4em;
+      }
+      .further {
+        margin-top: 56px;
+        padding: 28px 0;
+        border-top: 1px solid rgba(122, 31, 20, 0.3);
+        border-bottom: 1px solid rgba(122, 31, 20, 0.3);
+      }
+      .further p { font-size: 15px; margin-bottom: 8px; }
+      .further a { font-family: "Newsreader", ui-serif, Georgia, serif; font-style: italic; }
+
+      footer.site {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+        border-top: 1px solid rgba(122, 31, 20, 0.2);
+        color: var(--ink-600);
+        font-size: 14px;
+      }
+      footer.site a { color: var(--coral); }
+
+      @media (max-width: 640px) {
+        h1 { font-size: 36px; }
+        .lede { font-size: 18px; }
+        header.site nav a:not(.cta) { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site">
+      <a href="/" class="brand">Purelymail Calendar</a>
+      <nav>
+        <a href="/about">About</a>
+        <a href="https://github.com/bhartiyashesh/purelymailcalendar/wiki/On%E2%80%90device-AI-in-Purelymail-Calendar" target="_blank" rel="noopener noreferrer">Wiki</a>
+        <a href="https://github.com/bhartiyashesh/purelymailcalendar" rel="noopener noreferrer" target="_blank">Source</a>
+        <a href="/" class="cta">Sign in</a>
+      </nav>
+    </header>
+
+    <main>
+      <p class="eyebrow">Blog</p>
+      <h1>Private by <em>design</em>.</h1>
+      <p class="meta">By Yashesh Bharti &middot; May 19, 2026</p>
+      <p class="lede">
+        Most apps that promise to "make your inbox smarter" forward your email to
+        a model someone else operates. <strong>Purelymail Calendar doesn't.</strong>
+        We ran the language model inside your browser instead. This is the longer
+        argument for why, and why we think every product touching personal data
+        will eventually have to make the same call.
+      </p>
+
+      <h2>The thing nobody likes to say out loud</h2>
+      <p>
+        When you paste a paragraph into a cloud chatbot, you are not just asking
+        a model a question. You are handing a copy of that paragraph to a
+        company. That copy lives somewhere. It is logged. On most consumer plans
+        it is retained for at least a month, sometimes longer, and on the free
+        tiers of several big providers it is also <em>used to improve the model</em>
+       . which is the polite way to say it goes into the training pile for the
+        next version unless you found and ticked the right opt-out checkbox.
+      </p>
+      <p>
+        This is fine if what you're typing is "explain monads" or "what's a good
+        risotto recipe". It's a different story if what you're typing is a
+        forwarded email from your doctor, a NDA your lawyer sent over, or the
+        salary spreadsheet your CFO accidentally cc'd you on.
+      </p>
+      <p>
+        Inbox products that wrap a cloud LLM have the same shape, just without
+        the paste step. They forward your mail to the model on your behalf. Every
+        message you receive, every newsletter, every receipt, every personal
+        thread, becomes input the provider sees. The product's privacy page will
+        usually say "we don't train on customer data". Sometimes that's true.
+        Sometimes it's true today and changes quietly in a policy update next
+        quarter. Sometimes the model provider has its own policy on the
+        product's traffic that the product company doesn't fully control.
+      </p>
+      <p>
+        The provider isn't necessarily evil. They're running a real business.
+        But the structural fact stays the same: <strong>your private
+        correspondence is now a third party's operational data</strong>. You're
+        trusting their retention windows, their access controls, their breach
+        notifications, their subprocessors, and their next CEO.
+      </p>
+
+      <blockquote>
+        The best way to keep your email out of a model's training set is to keep
+        it out of the model's network entirely.
+      </blockquote>
+
+      <h2>The shape of the wrong incentive</h2>
+      <p>
+        Cloud-LLM email tools and personal-data products generally are built on
+        an incentive that's hard to be honest about: the more your data flows
+        through the provider, the better the provider's product gets, and the
+        better the provider's models get, and the more the provider can charge
+        the next customer. Your inbox is feedstock. The product is the
+        intermediate consumer; the model is the long-term beneficiary.
+      </p>
+      <p>
+        This is the same shape that gave us the last decade of ad-tech. Free
+        product, pay with your behaviour. People learned, slowly and painfully,
+        that "the data never leaves our servers" is not the same as "the data
+        never affects you". Profiles get sold. Models get trained. Policies
+        change. Companies get acquired and the new owner has different ideas.
+      </p>
+      <p>
+        We are now repeating the pattern with AI, faster and with a much more
+        intimate substrate. The 2010s ad-tech leak was that your browsing got
+        sold. The 2020s AI leak is that your writing, your actual thoughts in
+        their original sentences, becomes training material. That's a step up
+        in stakes.
+      </p>
+
+      <h2>The technical alternative existed all along</h2>
+      <p>
+        For a long time, "small models run on the device" was a research demo,
+        not a shipping product. That changed. The smartphones in your pocket
+        now have hardware tensor accelerators. Apple Intelligence runs on a
+        Mac. Microsoft's Phi family runs on consumer laptops. And, for the
+        Tasks feature in this app, Google quietly shipped
+        <strong>Gemini Nano</strong> as a built-in capability of the Chrome
+        browser on desktop.
+      </p>
+      <p>
+        Gemini Nano isn't a frontier model. It won't write your screenplay or
+        do agentic coding. It's small, and it's smart enough for the kind of
+        constrained classification job that "is this email an action item or
+        a newsletter?" actually is. Crucially: the weights live on your
+        computer, and the inference runs on your CPU or GPU. Once Chrome has
+        downloaded the model the first time, it works without a network
+        connection at all.
+      </p>
+      <p>
+        So we built the Tasks feature on top of it. When you click <em>Scan
+        inbox</em>, the browser pulls your recent messages through our backend,
+        runs each one through Nano locally, and gets back a structured list
+        of action items. The only thing that travels back to our server is the
+        extracted fields: a title, an optional due date, an optional owner.
+        Your email bodies stop at your browser tab. They are never sent to
+        OpenAI, Anthropic, Google, or anyone else. They are not stored on our
+        side either. <a href="https://github.com/bhartiyashesh/purelymailcalendar/wiki/On%E2%80%90device-AI-in-Purelymail-Calendar" target="_blank" rel="noopener noreferrer">The wiki page</a> walks
+        through this step by step.
+      </p>
+
+      <div class="ornament">&sect; &sect; &sect;</div>
+
+      <h2>"Trust us, but also verify"</h2>
+      <p>
+        A privacy claim is worthless without a way to check it. The nice thing
+        about doing inference in the browser is that the check is trivial.
+        Open DevTools, switch to the Network tab, and run a scan. You will see
+        a request to our backend for the email list. You will see a request
+        back to our backend with the extracted tasks. You will not see a
+        request to any third-party model host, because there isn't one to
+        make.
+      </p>
+      <p>
+        The source for the AI code is small enough to read in fifteen minutes.
+        <code>chromeAi.ts</code> is the feature detection.
+        <code>extractTasks.ts</code> is the per-email loop.
+        <code>schema.ts</code> is the JSON schema we constrain the model to.
+        That's it. There is no other AI module hidden somewhere in the
+        backend. The backend doesn't even import an AI library.
+      </p>
+
+      <h2>What we give up, honestly</h2>
+      <p>
+        On-device models are smaller than cloud ones, sometimes much smaller.
+        Nano gets "extract titles from short emails" right. It would be worse
+        than a frontier model at, say, summarising a 40-message thread or
+        writing a polite decline. We make that trade deliberately for an inbox.
+        The privacy floor matters more than the ceiling on cleverness, here.
+      </p>
+      <p>
+        On-device models also need device support. The Chrome Prompt API is
+        currently desktop-only and gated to relatively recent versions. The
+        first run downloads several gigabytes of weights, which Chrome does
+        once and then shares across every site that uses the API. For users
+        on older machines or unsupported browsers, the Tasks tab stays
+        hidden. We'd rather not have the feature than have it leak data on
+        the way to "working".
+      </p>
+
+      <h2>Why this is the future, not a niche</h2>
+      <p>
+        Three forces are pushing every personal-data product the same
+        direction.
+      </p>
+      <p>
+        <strong>One.</strong> Devices keep getting faster at running small
+        models. The watershed already happened on phones for image and
+        audio; it's happening now on laptops for language. The window where
+        "we have to ship it to the cloud" was the only credible answer is
+        closing.
+      </p>
+      <p>
+        <strong>Two.</strong> Regulation is catching up. The EU AI Act has
+        provisions for transparency about training data. Several US states
+        are passing laws that require explicit consent before personal
+        communications can be used to train models. The "we trained on
+        whatever flowed through us" era has a sell-by date.
+      </p>
+      <p>
+        <strong>Three.</strong> Users are getting tired. The shine on
+        cloud chatbots is wearing off as people read the privacy pages, see
+        the breach headlines, and realise that the convenience is the
+        product and they are the payment. The category that will win the
+        next decade isn't "AI that does more"; it's "AI that does enough,
+        on the user's own hardware, without phoning home".
+      </p>
+      <p>
+        Personal AI should feel less like sending a letter to a stranger
+        and more like a tool that lives on your desk. You wouldn't post
+        every email you receive to a public bulletin board so a clever
+        intern could organise it for you. The current default for cloud-LLM
+        inbox products is closer to that than anyone wants to admit.
+      </p>
+
+      <h2>The smallest possible promise</h2>
+      <p>
+        We don't ask you to trust us about anything important. We made the
+        feature checkable from your own devtools and put the source on
+        GitHub. The model weights live on your machine. The prompt lives
+        in your tab. The output is structured fields, not free-form text
+        that the model could hide secrets in. Your email bodies never
+        cross a third-party network because no third party is in the path.
+      </p>
+      <p>
+        If we ever change that, you'll see it in the source first. If a
+        cloud model is added to anything, it'll be opt-in, named clearly,
+        and easy to turn off. And if you don't trust us, you can run this
+        app yourself. The whole thing is one Python service and one Vite
+        bundle. The README has the steps.
+      </p>
+      <p>
+        Personal data should belong to the person. Their conversations
+        shouldn't become someone else's training data. The technology to
+        keep it that way already exists; the only thing missing has been
+        the willingness to use it. We hope this is a small example of what
+        that looks like.
+      </p>
+
+      <div class="further">
+        <p><strong>Further reading.</strong></p>
+        <p><a href="https://github.com/bhartiyashesh/purelymailcalendar/wiki/On%E2%80%90device-AI-in-Purelymail-Calendar" target="_blank" rel="noopener noreferrer">On-device AI in Purelymail Calendar</a>: the technical reference on the GitHub wiki.</p>
+        <p><a href="/about">About Purelymail Calendar</a>: the rest of the app.</p>
+        <p><a href="https://github.com/bhartiyashesh/purelymailcalendar" target="_blank" rel="noopener noreferrer">Source on GitHub</a>: every line.</p>
+      </div>
+    </main>
+
+    <footer class="site">
+      <p>
+        Built by <a href="https://yashesh.com" target="_blank" rel="noopener noreferrer">Yashesh Bharti</a>.
+        Source on <a href="https://github.com/bhartiyashesh/purelymailcalendar" target="_blank" rel="noopener noreferrer">GitHub</a>.
+        Not affiliated with Purelymail.
+      </p>
+    </footer>
+  </body>
+</html>
