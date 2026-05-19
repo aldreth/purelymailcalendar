@@ -1,6 +1,9 @@
 import type {
   CalendarSummary,
   CancelEventResponse,
+  Contact,
+  ContactFromEventResult,
+  ContactSyncResult,
   CreateEventResponse,
   EventIn,
   EventOut,
@@ -202,4 +205,36 @@ export const api = {
     }),
   deleteTask: (id: number) =>
     request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
+
+  // Contacts
+  searchContacts: (q?: string, limit = 50, opts?: { mailboxId?: number }) => {
+    const params = new URLSearchParams();
+    if (q && q.trim()) params.set("q", q.trim());
+    params.set("limit", String(limit));
+    return request<Contact[]>(`/api/contacts?${params.toString()}`, {
+      headers: mailboxOverrideHeader(opts),
+    });
+  },
+  syncContacts: (opts?: { force?: boolean; mailboxId?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.force) params.set("force", "true");
+    const qs = params.toString();
+    return request<ContactSyncResult>(
+      `/api/contacts/sync${qs ? `?${qs}` : ""}`,
+      {
+        method: "POST",
+        headers: mailboxOverrideHeader(opts),
+      },
+    );
+  },
+  getContact: (id: number) => request<Contact>(`/api/contacts/${id}`),
+  contactsFromEvent: (
+    attendees: { email: string; name?: string }[],
+    opts?: { mailboxId?: number },
+  ) =>
+    request<ContactFromEventResult>(`/api/contacts/from-event`, {
+      method: "POST",
+      body: JSON.stringify({ attendees }),
+      headers: mailboxOverrideHeader(opts),
+    }),
 };
