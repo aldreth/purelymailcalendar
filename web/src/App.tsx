@@ -798,6 +798,14 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
                 if (isNaN(start.getTime())) start = defaultTomorrowMorning();
                 const tz =
                   Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago";
+                // Send the event to the task's source mailbox AND to that
+                // mailbox's preferred calendar — otherwise the server falls
+                // back to the first calendar in the mailbox, which usually
+                // isn't the one the calendar dropdown is showing, and the
+                // block ends up invisible from the user's perspective.
+                const sourceMailbox = mailboxes.find((m) => m.id === t.mailbox_id);
+                const targetCalendar =
+                  sourceMailbox?.selected_calendar || calendar || undefined;
                 const payload: EventIn = {
                   summary: t.title,
                   start: toLocalIsoMinute(start),
@@ -805,12 +813,28 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
                   tz,
                   attendees: [],
                   dry_run: false,
+                  calendar: targetCalendar,
                 };
                 try {
                   const r = await handle(() =>
                     api.createEvent(payload, { mailboxId: t.mailbox_id }),
                   );
                   if (!r) return;
+                  // Optimistic upsert + mark pending so the block survives
+                  // the first refresh while Purelymail's CalDAV catches up.
+                  // Without this the row flashes onto the calendar and then
+                  // disappears as soon as refreshEvents() returns a list
+                  // that doesn't yet contain it.
+                  const optimistic: AppEvent = {
+                    ...buildOptimisticEvent(payload, r.uid, me),
+                    mailbox_id: sourceMailbox?.id,
+                    mailbox_email: sourceMailbox?.email,
+                    mailbox_display_name: sourceMailbox?.display_name,
+                    mailbox_color: sourceMailbox?.color ?? null,
+                    calendar_name: targetCalendar ?? null,
+                  };
+                  markPending(optimistic);
+                  setEvents((prev) => upsertEvent(prev, optimistic));
                   await handle(() => api.patchTask(t.id, { as_event_uid: r.uid }));
                   setTasks((prev) => prev.filter((x) => x.id !== t.id));
                   const when = start.toLocaleString(undefined, {
