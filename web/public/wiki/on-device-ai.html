@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#e94b35" />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="Yashesh Bharti" />
+
+    <title>On-device AI: Purelymail Calendar Wiki</title>
+    <meta
+      name="description"
+      content="How Purelymail Calendar uses Chrome's Built-in AI (Gemini Nano) to extract action items from email on the user's own device. Reference for the architecture, the data path, and what leaves the browser."
+    />
+    <meta
+      name="keywords"
+      content="on-device AI, Chrome Built-in AI, Gemini Nano, Prompt API, private LLM, email AI, local language model, browser AI, Purelymail"
+    />
+
+    <link rel="canonical" href="https://purelymailcalendar.com/wiki/on-device-ai" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap"
+      rel="stylesheet"
+    />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Purelymail Calendar" />
+    <meta property="og:title" content="On-device AI in Purelymail Calendar" />
+    <meta
+      property="og:description"
+      content="The Tasks feature runs Gemini Nano locally in your browser. Your email bodies never travel to a third-party model. Here's how, in detail."
+    />
+    <meta property="og:url" content="https://purelymailcalendar.com/wiki/on-device-ai" />
+    <meta property="og:image" content="https://purelymailcalendar.com/logo.png" />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="On-device AI in Purelymail Calendar" />
+    <meta name="twitter:description" content="Gemini Nano in the browser. No third-party model. Reference page." />
+    <meta name="twitter:image" content="https://purelymailcalendar.com/logo.png" />
+
+    <style>
+      :root {
+        --ink-500: #64748b;
+        --ink-600: #475569;
+        --ink-700: #334155;
+        --ink-800: #1e293b;
+        --ink-900: #0f172a;
+        --paper:   #fff3e3;
+        --paper-2: #ffe9d2;
+        --coral-light: #ff6b5a;
+        --coral:   #e94b35;
+        --coral-dark: #7a1f14;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background: var(--paper);
+        color: var(--ink-800);
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+      header.site {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 24px 24px 12px;
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        border-bottom: 1px solid rgba(122, 31, 20, 0.3);
+      }
+      header.site a.brand {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 20px;
+        font-weight: 500;
+        color: var(--coral-dark);
+        text-decoration: none;
+      }
+      header.site nav {
+        margin-left: auto;
+        display: flex;
+        gap: 20px;
+        align-items: baseline;
+      }
+      header.site nav a {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 12px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: rgba(122, 31, 20, 0.7);
+        text-decoration: none;
+      }
+      header.site nav a:hover { color: var(--coral-dark); }
+      header.site nav a.cta {
+        color: #fff;
+        background: var(--coral);
+        padding: 6px 12px;
+        border-radius: 4px;
+        letter-spacing: 0.08em;
+      }
+      header.site nav a.cta:hover { background: var(--coral-dark); }
+
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 40px 24px 64px;
+      }
+      .eyebrow {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.25em;
+        color: var(--coral);
+        margin-bottom: 14px;
+      }
+      h1 {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 44px;
+        line-height: 1.1;
+        font-weight: 500;
+        color: var(--coral-dark);
+        margin: 0 0 18px;
+        letter-spacing: -0.01em;
+      }
+      .meta {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-style: italic;
+        font-size: 13px;
+        color: var(--ink-600);
+        margin: -10px 0 28px;
+      }
+      .summary {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 19px;
+        line-height: 1.5;
+        font-style: italic;
+        color: var(--ink-700);
+        margin: 0 0 40px;
+        max-width: 36em;
+      }
+      h2 {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 26px;
+        line-height: 1.2;
+        font-weight: 500;
+        color: var(--coral-dark);
+        margin: 48px 0 12px;
+        border-top: 1px solid rgba(122, 31, 20, 0.2);
+        padding-top: 28px;
+      }
+      h3 {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 18px;
+        font-weight: 500;
+        color: var(--coral-dark);
+        margin: 28px 0 6px;
+      }
+      p, li { margin: 0 0 12px; font-size: 16px; }
+      ul, ol { padding-left: 22px; }
+      a { color: var(--coral); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+      a:hover { color: var(--coral-dark); }
+      code {
+        background: var(--paper-2);
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 0.9em;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      pre {
+        background: #fff;
+        border: 1px solid rgba(122, 31, 20, 0.2);
+        border-radius: 4px;
+        padding: 16px 18px;
+        overflow-x: auto;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      table.flow {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0 18px;
+        font-size: 14px;
+      }
+      table.flow th,
+      table.flow td {
+        border-bottom: 1px solid rgba(122, 31, 20, 0.15);
+        padding: 8px 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+      table.flow th {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-weight: 500;
+        color: var(--coral-dark);
+        background: var(--paper-2);
+      }
+      .toc {
+        background: var(--paper-2);
+        padding: 14px 20px;
+        border-radius: 4px;
+        font-size: 14px;
+        margin-bottom: 36px;
+      }
+      .toc strong {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        font-size: 11px;
+        color: var(--coral-dark);
+      }
+      .toc ul { margin: 6px 0 0; padding-left: 18px; }
+      .toc li { margin: 4px 0; font-size: 14px; }
+      .callout {
+        border-left: 3px solid var(--coral);
+        padding: 8px 16px;
+        background: rgba(255, 255, 255, 0.5);
+        margin: 16px 0;
+        font-size: 15px;
+      }
+
+      footer.site {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+        border-top: 1px solid rgba(122, 31, 20, 0.2);
+        color: var(--ink-600);
+        font-size: 14px;
+      }
+      footer.site a { color: var(--coral); }
+
+      @media (max-width: 640px) {
+        h1 { font-size: 32px; }
+        .summary { font-size: 17px; }
+        header.site nav a:not(.cta) { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site">
+      <a href="/" class="brand">Purelymail Calendar</a>
+      <nav>
+        <a href="/about">About</a>
+        <a href="/blog/private-by-design-ai">Blog</a>
+        <a href="https://github.com/bhartiyashesh/purelymailcalendar" rel="noopener noreferrer" target="_blank">Source</a>
+        <a href="/" class="cta">Sign in</a>
+      </nav>
+    </header>
+
+    <main>
+      <p class="eyebrow">Wiki</p>
+      <h1>On-device AI in Purelymail Calendar</h1>
+      <p class="meta">By Yashesh Bharti &middot; May 19, 2026</p>
+      <p class="summary">
+        The Tasks feature reads your inbox and turns action items into draftable events.
+        It does that with a language model that runs inside your browser, on your
+        machine. Your email bodies are never sent to OpenAI, Anthropic, Google, or any
+        other model provider. This page is the technical reference for how that works.
+      </p>
+
+      <div class="toc">
+        <strong>Contents</strong>
+        <ul>
+          <li><a href="#what">What "on-device" means here</a></li>
+          <li><a href="#data-path">The data path, step by step</a></li>
+          <li><a href="#what-leaves">What leaves the browser</a></li>
+          <li><a href="#what-doesnt">What does not</a></li>
+          <li><a href="#prompt-api">The Chrome Prompt API</a></li>
+          <li><a href="#schema">Structured output and guardrails</a></li>
+          <li><a href="#comparison">Comparison with cloud-LLM email tools</a></li>
+          <li><a href="#caveats">Honest caveats</a></li>
+          <li><a href="#verify">How to verify it yourself</a></li>
+        </ul>
+      </div>
+
+      <h2 id="what">What "on-device" means here</h2>
+      <p>
+        Purelymail Calendar uses Chrome's <strong>Built-in AI Prompt API</strong>,
+        which exposes <strong>Gemini Nano</strong>, a small language model that
+        Chrome ships with the browser. The model weights live on your computer.
+        Inference happens on your CPU or GPU. The browser never opens a network
+        connection to Google or anyone else to answer a prompt.
+      </p>
+      <p>
+        You can confirm the model is local by opening DevTools, switching to the
+        Network tab, and watching what happens while the Tasks scan runs. The only
+        requests you'll see are to this app's own backend (for the email list) and
+        to nothing else. No <code>generativelanguage.googleapis.com</code>, no
+        <code>api.openai.com</code>, no <code>api.anthropic.com</code>.
+      </p>
+
+      <h2 id="data-path">The data path, step by step</h2>
+      <table class="flow">
+        <thead>
+          <tr><th>Step</th><th>Where it happens</th><th>What's in flight</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1. You click <em>Scan inbox</em></td>
+            <td>Your browser</td>
+            <td>A single HTTP request to this app's backend.</td>
+          </tr>
+          <tr>
+            <td>2. Backend opens IMAP to Purelymail</td>
+            <td>Our web service, briefly in memory</td>
+            <td>Recent message headers + bodies, trimmed to about 8KB per email.</td>
+          </tr>
+          <tr>
+            <td>3. Backend returns those emails to your browser</td>
+            <td>TLS pipe to your tab</td>
+            <td>The trimmed bodies, never persisted on the server.</td>
+          </tr>
+          <tr>
+            <td>4. Browser runs Gemini Nano locally</td>
+            <td>Your device, no network</td>
+            <td>Prompt + body in RAM; weights in Chrome's cache.</td>
+          </tr>
+          <tr>
+            <td>5. Model returns structured JSON</td>
+            <td>Your device</td>
+            <td>Title, optional due date, optional owner. Nothing else.</td>
+          </tr>
+          <tr>
+            <td>6. Browser POSTs only the extracted fields back</td>
+            <td>TLS pipe to backend</td>
+            <td>e.g. <code>{title: "Send Q3 numbers", due: "2026-06-12T17:00"}</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 id="what-leaves">What leaves the browser</h2>
+      <p>The server only ever sees, and only ever stores:</p>
+      <ul>
+        <li>The extracted task title (max 500 chars).</li>
+        <li>An optional due timestamp, if the email mentioned one explicitly.</li>
+        <li>An optional owner name, if the email named one explicitly.</li>
+        <li>The originating message UID, subject, sender, and date, needed so a re-scan can update the same row instead of duplicating it.</li>
+      </ul>
+
+      <h2 id="what-doesnt">What does not</h2>
+      <ul>
+        <li>The email body. Never written to our database. Never sent to a model.</li>
+        <li>The model prompt. It's constructed and consumed in the same browser tab.</li>
+        <li>The model output before parsing. The browser parses the JSON and discards the raw string.</li>
+        <li>Anything from a non-matching email. If Nano returns <code>has_tasks=false</code>, the row is dropped on the spot.</li>
+      </ul>
+
+      <h2 id="prompt-api">The Chrome Prompt API</h2>
+      <p>
+        The implementation file is
+        <code><a href="https://github.com/bhartiyashesh/purelymailcalendar/blob/main/web/src/aiTasks/chromeAi.ts">web/src/aiTasks/chromeAi.ts</a></code>.
+        It feature-detects the API at two possible globals, <code>self.LanguageModel</code>
+        on current builds and <code>self.ai.languageModel</code> on older origin-trial
+        builds, and treats anything else as "AI not available". When the API exists,
+        Chrome reports one of four states:
+      </p>
+      <ul>
+        <li><code>unavailable</code>: your device or build can't run Nano.</li>
+        <li><code>downloadable</code>: Chrome can fetch the weights, but hasn't yet.</li>
+        <li><code>downloading</code>: first-run weight download in progress.</li>
+        <li><code>available</code>: model loaded, ready to prompt.</li>
+      </ul>
+      <p>
+        The weights are downloaded <strong>by Chrome</strong>, once, on first use of any
+        Prompt API site on your computer. They're shared across sites. We don't host or
+        ship them; we just call into what's already there.
+      </p>
+
+      <h2 id="schema">Structured output and guardrails</h2>
+      <p>
+        Small models drift. To keep Nano on-rails we pass a JSON schema as the
+        <code>responseConstraint</code>, so the model is forced to emit something
+        parseable:
+      </p>
+      <pre>{
+  has_tasks: boolean,
+  tasks: [{
+    title: string (1..200 chars),
+    due:   ISO datetime,  // optional, only when mentioned
+    owner: string         // optional, only when explicit
+  }] (max 5)
+}</pre>
+      <p>
+        The system prompt is short and conservative: ignore newsletters, marketing,
+        receipts, FYI-only messages; only fill <code>due</code> when the email mentions
+        a specific date or time; never guess. If a single email's response fails to
+        parse, the batch keeps going; that email is dropped, the rest aren't.
+      </p>
+
+      <h2 id="comparison">Comparison with cloud-LLM email tools</h2>
+      <p>
+        Most "AI in your inbox" products from the last two years take the opposite
+        approach: forward email content to a cloud language model, then return the
+        result. That has real consequences for what the model provider, the product
+        company, and any subprocessor sees and stores.
+      </p>
+      <table class="flow">
+        <thead>
+          <tr><th></th><th>Cloud-LLM pattern</th><th>This app</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Where the model runs</td>
+            <td>Provider's GPU cluster</td>
+            <td>Your CPU / GPU, in-browser</td>
+          </tr>
+          <tr>
+            <td>Email body is sent over the internet to a model</td>
+            <td>Yes</td>
+            <td>No</td>
+          </tr>
+          <tr>
+            <td>Provider retains prompts (by default policy)</td>
+            <td>Typically 30 days to indefinite</td>
+            <td>Not applicable; no provider involved</td>
+          </tr>
+          <tr>
+            <td>Prompts may be used for model training</td>
+            <td>Depends on plan and opt-outs</td>
+            <td>Not applicable</td>
+          </tr>
+          <tr>
+            <td>Subprocessor exposure</td>
+            <td>Provider plus their cloud host</td>
+            <td>None beyond your browser and our backend</td>
+          </tr>
+          <tr>
+            <td>Works offline after first model download</td>
+            <td>No</td>
+            <td>Inference does; fetching the email list still needs the network</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 id="caveats">Honest caveats</h2>
+      <p>
+        We try to be straight about what this approach does and doesn't fix.
+      </p>
+      <ul>
+        <li>
+          <strong>The email body still passes through our backend in flight.</strong>
+          We open IMAP to Purelymail, fetch recent messages, and relay them to your
+          browser over TLS. They aren't persisted, but they exist in our process
+          memory for the duration of the request.
+        </li>
+        <li>
+          <strong>Gemini Nano is small.</strong> It's good at "is this an action item
+          or a newsletter?" and "what's the title?" It's less good at multi-step
+          reasoning, summarisation of long threads, or anything cross-document.
+          A frontier model would do those better. We're trading capability for
+          privacy here, and we think the trade is right for an inbox.
+        </li>
+        <li>
+          <strong>Browser support is uneven.</strong> The Prompt API is a Chrome
+          desktop feature today. We hide the Tasks tab on touch devices and on
+          browsers that don't expose the API at all.
+        </li>
+        <li>
+          <strong>The structured output isn't perfect.</strong> Nano occasionally
+          extracts something silly. You see every extracted task before anything is
+          done with it, and you can dismiss or snooze each one individually.
+        </li>
+      </ul>
+
+      <h2 id="verify">How to verify it yourself</h2>
+      <ol>
+        <li>Open the app in a recent Chrome desktop build. Sign in and connect a mailbox.</li>
+        <li>Open DevTools (Cmd+Option+I / Ctrl+Shift+I), switch to the Network tab, and check "Disable cache".</li>
+        <li>Go to the Tasks tab and click <em>Scan inbox</em>.</li>
+        <li>
+          You'll see exactly two kinds of requests: <code>/api/inbox/recent</code>
+          (the email fetch) and <code>/api/tasks/bulk</code> (the structured rows we
+          send back). No third-party hosts.
+        </li>
+        <li>
+          You can also read the source. The relevant files are
+          <code><a href="https://github.com/bhartiyashesh/purelymailcalendar/blob/main/web/src/aiTasks/chromeAi.ts">chromeAi.ts</a></code>,
+          <code><a href="https://github.com/bhartiyashesh/purelymailcalendar/blob/main/web/src/aiTasks/extractTasks.ts">extractTasks.ts</a></code>,
+          and
+          <code><a href="https://github.com/bhartiyashesh/purelymailcalendar/blob/main/web/src/aiTasks/schema.ts">schema.ts</a></code>.
+          The server side is just
+          <code><a href="https://github.com/bhartiyashesh/purelymailcalendar/blob/main/calinvite_web/tasks.py">calinvite_web/tasks.py</a></code>.
+        </li>
+      </ol>
+
+      <div class="callout">
+        <strong>Want the longer argument?</strong> We wrote a blog post on why this
+        approach matters and where it's headed: <a href="/blog/private-by-design-ai">Private by design</a>.
+      </div>
+    </main>
+
+    <footer class="site">
+      <p>
+        Built by <a href="https://yashesh.com" target="_blank" rel="noopener noreferrer">Yashesh Bharti</a>.
+        Source on <a href="https://github.com/bhartiyashesh/purelymailcalendar" target="_blank" rel="noopener noreferrer">GitHub</a>.
+        Not affiliated with Purelymail.
+      </p>
+    </footer>
+  </body>
+</html>

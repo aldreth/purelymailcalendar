@@ -463,6 +463,40 @@ if _about_path is not None:
         return FileResponse(path)
 
 
+# Static content pages (wiki + blog). Same dev-vs-prod resolution trick as
+# /about above: in prod they live under web/dist/ after `npm run build`;
+# in dev we read straight from web/public/. Each tuple is (route, dist
+# location, public-source location).
+_content_pages = [
+    (
+        "/wiki/on-device-ai",
+        Path(__file__).resolve().parent.parent / "web" / "dist" / "wiki" / "on-device-ai.html",
+        Path(__file__).resolve().parent.parent / "web" / "public" / "wiki" / "on-device-ai.html",
+    ),
+    (
+        "/blog/private-by-design-ai",
+        Path(__file__).resolve().parent.parent / "web" / "dist" / "blog" / "private-by-design-ai.html",
+        Path(__file__).resolve().parent.parent / "web" / "public" / "blog" / "private-by-design-ai.html",
+    ),
+]
+
+
+def _make_content_route(dist_path: Path, public_path: Path):
+    def _serve():
+        for p in (dist_path, public_path):
+            if p.is_file():
+                return FileResponse(p)
+        raise HTTPException(status_code=404, detail="page not found")
+    return _serve
+
+
+for _route, _dist, _public in _content_pages:
+    if _dist.is_file() or _public.is_file():
+        handler = _make_content_route(_dist, _public)
+        app.get(_route)(handler)
+        app.get(_route + "/")(handler)
+
+
 if _static_dir.is_dir():
     app.mount("/assets", StaticFiles(directory=_static_dir / "assets"), name="assets")
 
