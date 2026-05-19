@@ -51,37 +51,58 @@ export function TasksView({
         </p>
       </header>
 
-      <div className="mb-6 rounded-lg border border-accent-700/20 bg-accent-50/60 px-5 py-4">
-        <h2 className="font-serif text-base font-semibold text-accent-900">
-          Where your data lives
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-ink-700">
-          This feature runs end-to-end on your computer. The email text never leaves your
-          browser, and nothing is sent to a remote AI service.
-        </p>
-        <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-ink-700">
-          <li>
-            Recent emails are pulled from Purelymail's IMAP server straight into your
-            browser. Your inbox stays unread; we don't touch the seen flag.
-          </li>
-          <li>
-            Extraction runs on{" "}
-            <span className="font-medium text-ink-900">Gemini Nano</span>, the on-device
-            model Chrome ships. The model lives on your machine. No email text is sent to
-            Google, OpenAI, Anthropic, or any other LLM provider.
-          </li>
-          <li>
-            Only what's needed to render the task list is stored on the server: the
-            extracted task title, optional due date, and the source subject line. The full
-            email body is never persisted.
-          </li>
-          <li>
-            Action items are tied to your account, so they survive a refresh and follow
-            you across devices. You can mark them done, snooze, or dismiss them at any
-            time; deletion is permanent.
-          </li>
-        </ul>
-      </div>
+      <details className="group mb-6 rounded-lg border border-accent-700/20 bg-accent-50/60 open:bg-accent-50/80">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-5 py-3 text-sm font-medium text-accent-900 marker:hidden [&::-webkit-details-marker]:hidden">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            aria-hidden
+            className="text-accent-700 transition-transform group-open:rotate-90"
+          >
+            <path
+              d="M4 2l4 4-4 4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          Why should I trust this?
+        </summary>
+        <div className="border-t border-accent-700/15 px-5 py-4">
+          <h2 className="font-serif text-base font-semibold text-accent-900">
+            Where your data lives
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-ink-700">
+            This feature runs end-to-end on your computer. The email text never leaves
+            your browser, and nothing is sent to a remote AI service.
+          </p>
+          <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-ink-700">
+            <li>
+              Recent emails are pulled from Purelymail's IMAP server straight into your
+              browser. Your inbox stays unread; we don't touch the seen flag.
+            </li>
+            <li>
+              Extraction runs on{" "}
+              <span className="font-medium text-ink-900">Gemini Nano</span>, the on-device
+              model Chrome ships. The model lives on your machine. No email text is sent
+              to Google, OpenAI, Anthropic, or any other LLM provider.
+            </li>
+            <li>
+              Only what's needed to render the task list is stored on the server: the
+              extracted task title, optional due date, and the source subject line. The
+              full email body is never persisted.
+            </li>
+            <li>
+              Action items are tied to your account, so they survive a refresh and follow
+              you across devices. You can mark them done, snooze, or dismiss them at any
+              time; deletion is permanent.
+            </li>
+          </ul>
+        </div>
+      </details>
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
