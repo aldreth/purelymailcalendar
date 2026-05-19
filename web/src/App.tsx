@@ -14,7 +14,7 @@ import { UnofficialNote } from "./components/UnofficialNote";
 import { RunningSha } from "./components/RunningSha";
 import { ToastStack, type ToastMsg } from "./components/Toast";
 import { AddMailboxModal } from "./components/AddMailboxModal";
-import { TasksView } from "./components/TasksView";
+import { TasksView, type ScanRange } from "./components/TasksView";
 import { AiScanModal } from "./components/AiScanModal";
 import { useAiAvailability } from "./aiTasks/useAiAvailability";
 import { addDays, buildMonthGrid, fmtTimeShort, startOfDay, startOfWeek } from "./util";
@@ -217,6 +217,7 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  const [scanRange, setScanRange] = useState<ScanRange>("since-last-scan");
   const tasksLoadedRef = useRef(false);
   // refreshTasks is declared further down once `handle` exists. Hoisting
   // its dependencies here keeps the rest of the file readable.
@@ -784,13 +785,19 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
             <TasksView
               status={ai.status}
               mailboxCount={mailboxes.length}
+              lastScannedAt={
+                typeof activeMailboxId === "number"
+                  ? mailboxes.find((m) => m.id === activeMailboxId)?.last_scanned_at ?? null
+                  : null
+              }
               tasks={tasks}
               loading={tasksLoading}
-              onScan={() => {
+              onScan={(range) => {
                 if (typeof activeMailboxId !== "number") {
                   pushToast("error", "Pick a single account from the switcher before scanning.");
                   return;
                 }
+                setScanRange(range);
                 setScanOpen(true);
               }}
               onBlockTime={async (t) => {
@@ -873,7 +880,6 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
                   pushToast("error", e?.message || "could not block time");
                 }
               }}
-              onCreateEvent={(t) => openEventFormForTask(t)}
               onDone={async (t) => {
                 setTasks((prev) => prev.filter((x) => x.id !== t.id));
                 try {
@@ -959,21 +965,41 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
         />
       )}
 
-      {scanOpen && typeof activeMailboxId === "number" && (
-        <AiScanModal
-          activeMailboxId={activeMailboxId}
-          onClose={() => setScanOpen(false)}
-          onComplete={(written) => {
-            pushToast(
-              "success",
-              written === 0
-                ? "Scan finished. No new tasks found."
-                : `Scan finished. ${written} task${written === 1 ? "" : "s"} found.`,
-            );
-            refreshTasks();
-          }}
-        />
-      )}
+      {scanOpen && typeof activeMailboxId === "number" && (() => {
+        const activeMb = mailboxes.find((m) => m.id === activeMailboxId);
+        const useIncremental =
+          scanRange === "since-last-scan" && !!activeMb?.last_scanned_at;
+        const sinceDays =
+          scanRange === "since-last-scan" ? 14 : Number(scanRange);
+        return (
+          <AiScanModal
+            activeMailboxId={activeMailboxId}
+            sinceIso={useIncremental ? activeMb!.last_scanned_at ?? null : null}
+            sinceDays={sinceDays}
+            onClose={() => setScanOpen(false)}
+            onComplete={(written) => {
+              pushToast(
+                "success",
+                written === 0
+                  ? "Scan finished. No new tasks found."
+                  : `Scan finished. ${written} task${written === 1 ? "" : "s"} found.`,
+              );
+              refreshTasks();
+              // Stamp last_scanned_at so the next Fetch can default to
+              // an incremental window. Best-effort; UI does not need to
+              // block on this.
+              api
+                .markScanComplete(activeMailboxId)
+                .then((updated) => {
+                  setMailboxes((prev) =>
+                    prev.map((m) => (m.id === updated.id ? updated : m)),
+                  );
+                })
+                .catch(() => { /* ignore */ });
+            }}
+          />
+        );
+      })()}
 
       {cancelChoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4">

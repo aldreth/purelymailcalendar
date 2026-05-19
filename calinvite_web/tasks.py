@@ -61,7 +61,15 @@ def _to_out(t: TaskItem) -> TaskItemOut:
 
 @router.get("/api/inbox/recent", response_model=List[InboxMessageOut])
 def get_recent_inbox(
-    since_days: int = Query(14, ge=1, le=60),
+    since_days: int = Query(14, ge=1, le=365),
+    since_iso: Optional[str] = Query(
+        None,
+        description=(
+            "ISO-8601 timestamp. When set, fetches only emails received "
+            "after this point (incremental scan). Takes precedence over "
+            "since_days."
+        ),
+    ),
     limit: int = Query(50, ge=1, le=200),
     mailbox: Mailbox = Depends(current_mailbox),
 ):
@@ -70,10 +78,26 @@ def get_recent_inbox(
     Bodies are trimmed server-side to ~8KB so a downstream LLM prompt
     stays bounded. Each row also carries a `truncated` flag so the client
     can tell the user when it's working with a partial body.
+
+    If `since_iso` is provided, only emails received after that timestamp
+    are returned (incremental scan). Otherwise `since_days` is used as
+    the lookback window.
     """
+    effective_days = since_days
+    if since_iso:
+        try:
+            since_dt = datetime.fromisoformat(since_iso.replace("Z", "+00:00"))
+        except Exception:
+            raise HTTPException(status_code=400, detail=f"invalid since_iso: {since_iso}")
+        # IMAP SINCE is day-resolution; compute days-back, floored to 1.
+        now_utc = datetime.utcnow()
+        # Strip tz to compare against the naive utcnow value.
+        since_naive = since_dt.replace(tzinfo=None) if since_dt.tzinfo else since_dt
+        delta = now_utc - since_naive
+        effective_days = max(1, delta.days + 1)
     creds = services.creds_for(mailbox)
     try:
-        msgs = services.list_recent_inbox(creds, since_days=since_days, limit=limit)
+        msgs = services.list_recent_inbox(creds, since_days=effective_days, limit=limit)
     except (RuntimeError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

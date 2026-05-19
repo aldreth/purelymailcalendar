@@ -4,6 +4,7 @@ import { createExtractionSession, extractBatch, type ExtractedRow } from "../aiT
 import type { ChromeAiSession } from "../aiTasks/chromeAi";
 
 type Phase =
+  | { kind: "checking" }
   | { kind: "downloading"; loaded: number; total: number }
   | { kind: "fetching" }
   | { kind: "extracting"; done: number; total: number; found: number }
@@ -14,6 +15,11 @@ type Phase =
 
 type Props = {
   activeMailboxId: number;
+  /** Optional ISO timestamp; only emails received after this are pulled.
+   * When absent, falls back to the `sinceDays` window. */
+  sinceIso?: string | null;
+  /** Days-back window used when `sinceIso` is absent. */
+  sinceDays?: number;
   onClose: () => void;
   /** Called once the scan finishes successfully so the caller can refetch
    * the tasks list. */
@@ -21,17 +27,21 @@ type Props = {
 };
 
 
-export function AiScanModal({ activeMailboxId, onClose, onComplete }: Props) {
-  const [phase, setPhase] = useState<Phase>({ kind: "fetching" });
+export function AiScanModal({
+  activeMailboxId,
+  sinceIso,
+  sinceDays = 14,
+  onClose,
+  onComplete,
+}: Props) {
+  const [phase, setPhase] = useState<Phase>({ kind: "checking" });
   const abortRef = useRef<AbortController | null>(null);
   const sessionRef = useRef<ChromeAiSession | null>(null);
 
   // Stable refs for the callbacks so the scan effect can depend only on
   // `activeMailboxId`. Without this, every parent re-render (toast push,
   // task list update, etc.) recreates the inline onComplete arrow, the
-  // effect deps change, and the whole scan kicks off again — including a
-  // fresh /api/inbox/recent call and a new LanguageModel session. That
-  // shows up as runaway IMAP traffic and a stuck modal.
+  // effect deps change, and the whole scan kicks off again.
   const onCompleteRef = useRef(onComplete);
   const onCloseRef = useRef(onClose);
   useEffect(() => {
@@ -51,9 +61,11 @@ export function AiScanModal({ activeMailboxId, onClose, onComplete }: Props) {
     (async () => {
       let session: ChromeAiSession | null = null;
       try {
-        // Create the session first so we can surface model-download
-        // progress before we touch IMAP. If the model is already
-        // downloaded the create call returns immediately.
+        // Start in 'checking' so the copy reads honestly even when the
+        // model is already downloaded. The session.create() call below
+        // resolves immediately in that case; if a real download is
+        // happening, the onDownloadProgress callback flips us into the
+        // 'downloading' phase with a progress bar.
         session = await createExtractionSession({
           signal: controller.signal,
           onDownloadProgress: (loaded, total) => {
@@ -64,7 +76,9 @@ export function AiScanModal({ activeMailboxId, onClose, onComplete }: Props) {
         if (controller.signal.aborted) return;
 
         safeSet({ kind: "fetching" });
-        const emails = await api.inboxRecent({ since_days: 14, limit: 50 });
+        const emails = await api.inboxRecent(
+          sinceIso ? { since_iso: sinceIso } : { since_days: sinceDays },
+        );
         if (controller.signal.aborted) return;
 
         if (emails.length === 0) {
@@ -111,7 +125,13 @@ export function AiScanModal({ activeMailboxId, onClose, onComplete }: Props) {
         // ignore
       }
     };
-  }, [activeMailboxId]);
+  }, [activeMailboxId, sinceIso, sinceDays]);
+
+  const showBreathing =
+    phase.kind === "fetching" ||
+    phase.kind === "extracting" ||
+    phase.kind === "saving" ||
+    (phase.kind === "downloading" && phase.total > 0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4">
@@ -144,6 +164,8 @@ export function AiScanModal({ activeMailboxId, onClose, onComplete }: Props) {
           <PhaseView phase={phase} />
         </div>
 
+        {showBreathing && <BoxBreathing />}
+
         <div className="mt-5 flex justify-end gap-2">
           {phase.kind === "done" || phase.kind === "error" ? (
             <button onClick={onClose} className="btn-primary">
@@ -169,6 +191,16 @@ export function AiScanModal({ activeMailboxId, onClose, onComplete }: Props) {
 
 function PhaseView({ phase }: { phase: Phase }) {
   switch (phase.kind) {
+    case "checking":
+      return (
+        <div>
+          <p className="text-sm font-medium text-ink-800">Checking model...</p>
+          <p className="mt-1 text-xs text-ink-500">
+            Confirming the on-device AI is ready.
+          </p>
+          <Spinner />
+        </div>
+      );
     case "downloading": {
       const pct = phase.total > 0 ? Math.round((phase.loaded / phase.total) * 100) : 0;
       return (
@@ -184,8 +216,10 @@ function PhaseView({ phase }: { phase: Phase }) {
     case "fetching":
       return (
         <div>
-          <p className="text-sm font-medium text-ink-800">Reading recent emails...</p>
-          <p className="mt-1 text-xs text-ink-500">Last 14 days, up to 50 messages.</p>
+          <p className="text-sm font-medium text-ink-800">Reading your inbox...</p>
+          <p className="mt-1 text-xs text-ink-500">
+            Pulling recent messages into the browser. They never leave your device.
+          </p>
           <Spinner />
         </div>
       );
@@ -194,7 +228,7 @@ function PhaseView({ phase }: { phase: Phase }) {
       return (
         <div>
           <p className="text-sm font-medium text-ink-800">
-            Extracting tasks ({phase.done} of {phase.total})
+            Finding tasks ({phase.done} of {phase.total})
           </p>
           <p className="mt-1 text-xs text-ink-500">
             Found <span className="font-medium text-ink-700">{phase.found}</span> so far.
@@ -246,6 +280,48 @@ function Spinner() {
   return (
     <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-ink-100">
       <div className="h-full w-1/3 animate-loader-slide rounded-full bg-accent-500" />
+    </div>
+  );
+}
+
+
+/** Box breathing exercise (4-4-4-4): inhale, hold, exhale, hold. Shown
+ * during the longer waits in the scan flow so the user has something
+ * grounding to do while the model and IMAP work. The circle scales with
+ * the inhale/exhale phases; CSS handles the easing. */
+function BoxBreathing() {
+  const cues = ["Breathe in", "Hold", "Breathe out", "Hold"] as const;
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setIdx((i) => (i + 1) % 4), 4000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Scale grows on inhale, holds large, shrinks on exhale, holds small.
+  const scale = idx === 0 ? 1.4 : idx === 1 ? 1.4 : idx === 2 ? 0.85 : 0.85;
+
+  return (
+    <div className="mt-6 flex flex-col items-center gap-3 border-t border-ink-100 pt-5">
+      <p className="text-center font-serif text-sm italic text-ink-600">
+        Take this moment to breathe. The model is working so you don't have to.
+      </p>
+      <div className="flex h-28 items-center justify-center">
+        <div
+          aria-hidden
+          className="h-20 w-20 rounded-full bg-accent-500/15 ring-1 ring-accent-500/30 transition-transform duration-[3500ms] ease-in-out"
+          style={{ transform: `scale(${scale})` }}
+        />
+      </div>
+      <p
+        key={idx}
+        className="font-serif text-base text-accent-900 transition-opacity"
+        aria-live="polite"
+      >
+        {cues[idx]}
+      </p>
+      <p className="text-[11px] uppercase tracking-[0.2em] text-ink-400">
+        Box breathing &middot; 4-4-4-4
+      </p>
     </div>
   );
 }

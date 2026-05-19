@@ -1,17 +1,22 @@
+import { useState } from "react";
 import type { AiAvailability } from "../aiTasks/chromeAi";
 import type { TaskItem } from "../types";
 import { TaskRow } from "./TaskRow";
+
+export type ScanRange = "since-last-scan" | "7" | "14" | "30" | "90";
 
 type Props = {
   status: AiAvailability;
   /** Mailboxes currently connected. The Fetch button is disabled when
    * there's nothing to scan. */
   mailboxCount: number;
+  /** ISO timestamp of the most recent successful scan on the active
+   * mailbox, if any. Disables the "Since last scan" option when null. */
+  lastScannedAt: string | null;
   tasks: TaskItem[];
   loading: boolean;
-  onScan: () => void;
+  onScan: (range: ScanRange) => void;
   onBlockTime: (task: TaskItem) => void;
-  onCreateEvent: (task: TaskItem) => void;
   onDone: (task: TaskItem) => void;
   onSnooze: (task: TaskItem, days: 1 | 3 | 7) => void;
   onDismiss: (task: TaskItem) => void;
@@ -20,16 +25,19 @@ type Props = {
 export function TasksView({
   status,
   mailboxCount,
+  lastScannedAt,
   tasks,
   loading,
   onScan,
   onBlockTime,
-  onCreateEvent,
   onDone,
   onSnooze,
   onDismiss,
 }: Props) {
   const canScan = mailboxCount > 0 && status !== "unavailable";
+  // Default to incremental ("since last scan") if we have a checkpoint;
+  // otherwise to a sensible 14-day lookback for the first run.
+  const [range, setRange] = useState<ScanRange>(lastScannedAt ? "since-last-scan" : "14");
   const scanLabel =
     status === "downloadable"
       ? "Fetch tasks (downloads model first)"
@@ -95,10 +103,10 @@ export function TasksView({
         </details>
       </header>
 
-      <div className="mb-5">
+      <div className="mb-5 flex flex-wrap items-center gap-3">
         <button
           type="button"
-          onClick={onScan}
+          onClick={() => onScan(range)}
           disabled={!canScan}
           className="btn-primary"
           title={
@@ -111,18 +119,34 @@ export function TasksView({
         >
           {scanLabel}
         </button>
-        {status === "downloadable" && (
-          <p className="mt-2 text-xs text-ink-500">
-            First-time use downloads the on-device model (around 3 GB). Chrome handles the
-            download; future scans skip this step.
-          </p>
-        )}
-        {status === "downloading" && (
-          <p className="mt-2 text-xs text-ink-500">
-            The on-device model is still downloading. Try again in a minute.
-          </p>
-        )}
+        <label className="flex items-center gap-2 text-xs text-ink-500">
+          Range
+          <select
+            value={range}
+            onChange={(e) => setRange(e.target.value as ScanRange)}
+            className="rounded border border-ink-200 bg-white px-2 py-1 text-xs text-ink-700 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+          >
+            <option value="since-last-scan" disabled={!lastScannedAt}>
+              Since last scan{lastScannedAt ? "" : " (run once first)"}
+            </option>
+            <option value="7">Last 7 days</option>
+            <option value="14">Last 2 weeks</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 3 months</option>
+          </select>
+        </label>
       </div>
+      {status === "downloadable" && (
+        <p className="-mt-3 mb-4 text-xs text-ink-500">
+          First-time use downloads the on-device model (around 3 GB). Chrome handles the
+          download; future scans skip this step.
+        </p>
+      )}
+      {status === "downloading" && (
+        <p className="-mt-3 mb-4 text-xs text-ink-500">
+          The on-device model is still downloading. Try again in a minute.
+        </p>
+      )}
 
       {loading && tasks.length === 0 && (
         <p className="text-sm text-ink-500">Loading...</p>
@@ -135,7 +159,6 @@ export function TasksView({
               key={t.id}
               task={t}
               onBlockTime={onBlockTime}
-              onCreateEvent={onCreateEvent}
               onDone={onDone}
               onSnooze={onSnooze}
               onDismiss={onDismiss}

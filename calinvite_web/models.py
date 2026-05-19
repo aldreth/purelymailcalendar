@@ -67,6 +67,10 @@ class Mailbox(Base):
     # view. Nullable so the UI can fall back to a palette index derived from
     # `id` when the user hasn't picked one.
     color: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # Last time we ran an AI-tasks inbox scan against this mailbox. Drives
+    # the "since last scan" incremental fetch so we don't reprocess the
+    # same emails on every Fetch click.
+    last_scanned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(), default=_utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(), default=_utcnow, onupdate=_utcnow, nullable=False)
 

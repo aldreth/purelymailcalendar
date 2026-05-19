@@ -105,6 +105,8 @@ export const api = {
     }),
   deleteMailboxById: (id: number) =>
     request<{ ok: boolean }>(`/api/me/mailboxes/${id}`, { method: "DELETE" }),
+  markScanComplete: (id: number) =>
+    request<Mailbox>(`/api/me/mailboxes/${id}/scan-complete`, { method: "POST" }),
 
   // data
   calendars: () => request<CalendarSummary[]>("/api/calendars"),
@@ -172,9 +174,10 @@ export const api = {
     }),
 
   // AI tasks
-  inboxRecent: (opts?: { since_days?: number; limit?: number }) => {
+  inboxRecent: (opts?: { since_days?: number; since_iso?: string; limit?: number }) => {
     const q = new URLSearchParams();
-    if (opts?.since_days != null) q.set("since_days", String(opts.since_days));
+    if (opts?.since_iso) q.set("since_iso", opts.since_iso);
+    else if (opts?.since_days != null) q.set("since_days", String(opts.since_days));
     if (opts?.limit != null) q.set("limit", String(opts.limit));
     const qs = q.toString();
     return request<InboxMessage[]>(`/api/inbox/recent${qs ? `?${qs}` : ""}`);

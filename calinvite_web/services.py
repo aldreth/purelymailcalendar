@@ -286,18 +286,36 @@ def list_events(
         window_start = datetime.now(timezone.utc)
         window_end = window_start + timedelta(days=days)
 
-    def _do_search():
+    # PURELYMAIL CACHE WORKAROUND: the calendar-query REPORT with a
+    # time-range filter returns a stale list for windows whose start is
+    # an arbitrary historical date. Recently-PUT events show up in
+    # unfiltered listings (PROPFIND) but not in time-range REPORTs until
+    # whatever indexer Purelymail maintains catches up.
+    #
+    # Side-by-side confirmed in the dev log: an open-ended REPORT with
+    # `start=now()` returned the new events; a REPORT with
+    # `start=2026-04-26` against the SAME calendar moments later did
+    # not. The new events were on CalDAV the whole time.
+    #
+    # Fix: list every event in the calendar (no time-range filter) and
+    # filter client-side in this function. Slightly more bytes on the
+    # wire but always reflects fresh state.
+    def _do_fetch():
         client = cdav.connect(creds.caldav_url, creds.email, creds.password)
         calendar = cdav.get_calendar(client, calendar_name)
-        return list(
-            calendar.search(
-                start=window_start, end=window_end, event=True, expand=False
-            )
-        )
+        return list(calendar.events())
 
-    search_results = _with_retry(_do_search)
+    all_events = _with_retry(_do_fetch)
+
+    def _in_window(d: datetime) -> bool:
+        try:
+            d_aware = _to_aware(d)
+        except Exception:
+            return True  # be lenient when we can't normalize
+        return window_start <= d_aware <= window_end
+
     out: List[EventOut] = []
-    for ev in search_results:
+    for ev in all_events:
         try:
             cal = ICalendar.from_ical(ev.data)
         except Exception:
@@ -308,7 +326,9 @@ def list_events(
             except Exception:
                 continue
             if comp.get("rrule") is None:
-                out.append(base)
+                # Non-recurring: client-side time-range filter.
+                if _in_window(base.start):
+                    out.append(base)
                 continue
             # Recurring master: expand into individual occurrences inside the
             # visible window using the recurring-ical-events lib (already a
@@ -320,7 +340,8 @@ def list_events(
                 expanded = rie.of(cal).between(window_start, window_end)
             except Exception:
                 # If expansion fails, surface the master once so it isn't lost.
-                out.append(base)
+                if _in_window(base.start):
+                    out.append(base)
                 continue
             for inst in expanded:
                 inst_start = _to_aware(inst.get("dtstart").dt) if inst.get("dtstart") else base.start
@@ -335,6 +356,12 @@ def list_events(
                     )
                 )
     out.sort(key=lambda e: e.start)
+    print(
+        f"[list_events] mailbox={creds.email} calendar={calendar_name!r} "
+        f"window={window_start.isoformat()}..{window_end.isoformat()} returned {len(out)} events "
+        f"uids={[e.uid for e in out][:10]}",
+        flush=True,
+    )
     return out
 
 
@@ -527,9 +554,19 @@ def create_event(
     spec = _spec_from_input(inp, creds, sequence_override=0)
     ics_bytes, uid = build_request(spec)
 
+    print(
+        f"[create_event] mailbox={creds.email} requested_calendar={inp.calendar!r} "
+        f"summary={inp.summary!r} start={spec.start.isoformat()} uid={uid}",
+        flush=True,
+    )
+
     def _do_put():
         client = cdav.connect(creds.caldav_url, creds.email, creds.password)
         calendar = cdav.get_calendar(client, inp.calendar)
+        print(
+            f"[create_event] resolved_calendar={calendar.name!r} caldav_url={creds.caldav_url}",
+            flush=True,
+        )
         cdav.put_event(calendar, _strip_method(ics_bytes))
     _with_retry(_do_put)
 

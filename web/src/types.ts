@@ -13,6 +13,7 @@ export type Mailbox = {
   caldav_url: string;
   selected_calendar?: string | null;
   color?: string | null;
+  last_scanned_at?: string | null;
 };
 
 export type MailboxFailure = {

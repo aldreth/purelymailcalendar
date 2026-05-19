@@ -15,6 +15,7 @@ import re
 import ssl
 import urllib.error
 import urllib.request
+from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -50,6 +51,7 @@ class MailboxOut(BaseModel):
     caldav_url: str
     selected_calendar: Optional[str] = None
     color: Optional[str] = None
+    last_scanned_at: Optional[datetime] = None
 
 
 def _discover_account_id(email: str, password: str) -> str:
@@ -90,6 +92,7 @@ def _to_out(mb: Mailbox) -> MailboxOut:
         caldav_url=mb.caldav_url,
         selected_calendar=mb.selected_calendar,
         color=mb.color,
+        last_scanned_at=mb.last_scanned_at,
     )
 
 
@@ -222,6 +225,28 @@ def delete_mailbox_by_id(
     db.delete(mb)
     db.commit()
     return {"ok": True}
+
+
+@router.post("/mailboxes/{mailbox_id}/scan-complete", response_model=MailboxOut)
+def mark_scan_complete(
+    mailbox_id: int,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    """Update last_scanned_at = now for this mailbox. Called by the AI
+    tasks scan modal after a successful run so that the next Fetch only
+    needs to look at emails received after this point."""
+    mb = (
+        db.query(Mailbox)
+        .filter(Mailbox.id == mailbox_id, Mailbox.user_id == user.id)
+        .one_or_none()
+    )
+    if mb is None:
+        raise HTTPException(status_code=404, detail="mailbox not found")
+    mb.last_scanned_at = datetime.utcnow()
+    db.commit()
+    db.refresh(mb)
+    return _to_out(mb)
 
 
 # ---------------------------------------------------------------------------

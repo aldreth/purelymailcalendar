@@ -74,6 +74,8 @@ def _startup() -> None:
         "CREATE INDEX IF NOT EXISTS ix_scheduled_reminders_mailbox_id ON scheduled_reminders (mailbox_id)",
         # All-accounts overlay (phase 2a): user-pickable hex color per mailbox.
         "ALTER TABLE mailboxes ADD COLUMN IF NOT EXISTS color VARCHAR(16)",
+        # AI-tasks incremental scan: when was the last Fetch tasks run.
+        "ALTER TABLE mailboxes ADD COLUMN IF NOT EXISTS last_scanned_at TIMESTAMP",
         # AI-extracted tasks (feat/ai-tasks): nothing here yet besides
         # create_all picking up the new table. The unique index is enforced
         # by SQLAlchemy when create_all runs against a fresh DB; explicit

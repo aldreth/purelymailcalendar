@@ -3,18 +3,15 @@ import type { TaskItem } from "../types";
 
 type Props = {
   task: TaskItem;
-  /** One-click: drops a 30-min block onto the calendar at task.due_at or
-   * a sensible default. No attendees, no invite. */
+  /** Drops a 30-min block onto the calendar at task.due_at or a sensible
+   * default. No attendees, no invite. */
   onBlockTime: (task: TaskItem) => void;
-  /** Open the full event form pre-filled, for tasks where the user wants
-   * to pick time/attendees explicitly. */
-  onCreateEvent: (task: TaskItem) => void;
   onDone: (task: TaskItem) => void;
   onSnooze: (task: TaskItem, days: 1 | 3 | 7) => void;
   onDismiss: (task: TaskItem) => void;
 };
 
-export function TaskRow({ task, onBlockTime, onCreateEvent, onDone, onSnooze, onDismiss }: Props) {
+export function TaskRow({ task, onBlockTime, onDone, onSnooze, onDismiss }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -80,24 +77,14 @@ export function TaskRow({ task, onBlockTime, onCreateEvent, onDone, onSnooze, on
 
       <div ref={wrapRef} className="flex flex-wrap items-center gap-2">
         {!convertedTo && (
-          <>
-            <button
-              type="button"
-              className="btn-primary text-xs"
-              onClick={() => onBlockTime(task)}
-              title="One-click: drop a 30-min block on your calendar"
-            >
-              Block time on calendar
-            </button>
-            <button
-              type="button"
-              className="text-[11px] font-medium text-accent-700 underline-offset-2 hover:underline"
-              onClick={() => onCreateEvent(task)}
-              title="Open the event form with this task pre-filled"
-            >
-              Pick time...
-            </button>
-          </>
+          <button
+            type="button"
+            className="btn-primary text-xs"
+            onClick={() => onBlockTime(task)}
+            title="Drop a 30-min block on your calendar at the suggested time"
+          >
+            Pick time
+          </button>
         )}
         <button
           type="button"
