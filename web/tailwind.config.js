@@ -63,7 +63,11 @@ export default {
         //   600 = header / primary   (#E94B35)
         //   900 = outline / shadow   (#7A1F14)
         accent: {
-          50: "#fff3e3",
+          // 50 swapped from the editorial cream (#fff3e3) to pure white
+          // for a cleaner background. Active-state highlights that used
+          // bg-accent-50 should bump to accent-100 if they need to remain
+          // visible against the new white body.
+          50: "#ffffff",
           100: "#ffe9d2",
           200: "#ffd8b8",
           300: "#ffc197",
