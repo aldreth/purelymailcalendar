@@ -128,6 +128,7 @@ def replace_for_event(
     event_summary: str,
     event_start: datetime,
     inp: EventIn,
+    mailbox_id: Optional[int] = None,
 ) -> int:
     """Replace all pending reminders for this event/user with the current set.
 
@@ -160,11 +161,21 @@ def replace_for_event(
         occurrences = [event_start]
 
     with SessionLocal() as db:
-        db.query(ScheduledReminder).filter(
+        # Scope the wipe to (user, mailbox, event) so editing an event on one
+        # mailbox doesn't blow away an unrelated event with the same UID on a
+        # different mailbox. mailbox_id can be None in legacy callers; in that
+        # case fall back to the old user-wide wipe.
+        del_q = db.query(ScheduledReminder).filter(
             ScheduledReminder.user_id == user_id,
             ScheduledReminder.event_uid == event_uid,
             ScheduledReminder.sent_at.is_(None),
-        ).delete(synchronize_session=False)
+        )
+        if mailbox_id is not None:
+            del_q = del_q.filter(
+                (ScheduledReminder.mailbox_id == mailbox_id)
+                | (ScheduledReminder.mailbox_id.is_(None))
+            )
+        del_q.delete(synchronize_session=False)
 
         for occ_start in occurrences:
             for a in email_alarms:
@@ -176,6 +187,7 @@ def replace_for_event(
                     continue  # Don't schedule reminders in the past.
                 db.add(ScheduledReminder(
                     user_id=user_id,
+                    mailbox_id=mailbox_id,
                     event_uid=event_uid,
                     event_summary=event_summary,
                     event_start=event_start.replace(tzinfo=None) if event_start.tzinfo else event_start,
@@ -191,27 +203,44 @@ def replace_for_event(
     return written
 
 
-def cancel_for_event(user_id: int, event_uid: str) -> int:
+def cancel_for_event(user_id: int, event_uid: str, mailbox_id: Optional[int] = None) -> int:
     with SessionLocal() as db:
-        n = db.query(ScheduledReminder).filter(
+        q = db.query(ScheduledReminder).filter(
             ScheduledReminder.user_id == user_id,
             ScheduledReminder.event_uid == event_uid,
             ScheduledReminder.sent_at.is_(None),
-        ).delete(synchronize_session=False)
+        )
+        if mailbox_id is not None:
+            q = q.filter(
+                (ScheduledReminder.mailbox_id == mailbox_id)
+                | (ScheduledReminder.mailbox_id.is_(None))
+            )
+        n = q.delete(synchronize_session=False)
         db.commit()
         return n
 
 
-def cancel_for_occurrence(user_id: int, event_uid: str, occurrence_start: datetime) -> int:
+def cancel_for_occurrence(
+    user_id: int,
+    event_uid: str,
+    occurrence_start: datetime,
+    mailbox_id: Optional[int] = None,
+) -> int:
     """Delete a single pending reminder row for one occurrence."""
     occ_naive = occurrence_start.replace(tzinfo=None) if occurrence_start.tzinfo else occurrence_start
     with SessionLocal() as db:
-        n = db.query(ScheduledReminder).filter(
+        q = db.query(ScheduledReminder).filter(
             ScheduledReminder.user_id == user_id,
             ScheduledReminder.event_uid == event_uid,
             ScheduledReminder.occurrence_start == occ_naive,
             ScheduledReminder.sent_at.is_(None),
-        ).delete(synchronize_session=False)
+        )
+        if mailbox_id is not None:
+            q = q.filter(
+                (ScheduledReminder.mailbox_id == mailbox_id)
+                | (ScheduledReminder.mailbox_id.is_(None))
+            )
+        n = q.delete(synchronize_session=False)
         db.commit()
         return n
 
@@ -306,7 +335,21 @@ def tick_due(limit: int = 50) -> dict:
         )
         for r in rows:
             user = db.query(User).filter(User.id == r.user_id).one_or_none()
-            mb = user.mailbox if user else None
+            mb: Optional[Mailbox] = None
+            if user is not None:
+                if r.mailbox_id is not None:
+                    mb = (
+                        db.query(Mailbox)
+                        .filter(
+                            Mailbox.id == r.mailbox_id,
+                            Mailbox.user_id == r.user_id,
+                        )
+                        .one_or_none()
+                    )
+                # Back-compat: rows written before multi-mailbox have no
+                # mailbox_id. Fall back to the user's first mailbox.
+                if mb is None and user.mailboxes:
+                    mb = user.mailboxes[0]
             if mb is None:
                 r.last_error = "user or mailbox missing"
                 r.attempts += 1
@@ -426,7 +469,16 @@ def confirm_endpoint(token: str, action: str = Query("yes", pattern="^(yes|cance
             )
 
         user = db.query(User).filter(User.id == r.user_id).one_or_none()
-        mb = user.mailbox if user else None
+        mb: Optional[Mailbox] = None
+        if user is not None:
+            if r.mailbox_id is not None:
+                mb = (
+                    db.query(Mailbox)
+                    .filter(Mailbox.id == r.mailbox_id, Mailbox.user_id == r.user_id)
+                    .one_or_none()
+                )
+            if mb is None and user.mailboxes:
+                mb = user.mailboxes[0]
         if mb is None:
             return _html_page(
                 "Account missing",
@@ -437,6 +489,7 @@ def confirm_endpoint(token: str, action: str = Query("yes", pattern="^(yes|cance
         try:
             services.cancel_occurrence(
                 user_id=user.id,
+                mailbox_id=mb.id,
                 event_uid=r.event_uid,
                 occurrence_start=r.occurrence_start or r.event_start,
             )

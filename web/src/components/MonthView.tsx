@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import type { EventOut } from "../types";
+import { eventStripeStyle } from "../mailboxColors";
 import {
   addDays,
   buildMonthGrid,
@@ -169,6 +170,7 @@ export function MonthView({ anchorDate, events, onCreateAt, onEdit, onMove }: Pr
                         onEdit(ev);
                       }}
                       className={`pointer-events-auto truncate rounded px-1.5 py-0.5 text-left text-[11px] font-medium ring-1 ${tone} hover:brightness-95`}
+                      style={eventStripeStyle(ev)}
                       title={`${ev.summary} - ${fmtTimeShort(start)}`}
                     >
                       <span className="opacity-70">{fmtTimeShort(start)}</span>{" "}

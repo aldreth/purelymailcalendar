@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import type { CalendarSummary, Me } from "../types";
+import type { CalendarSummary, Mailbox, Me } from "../types";
+import { MailboxSwitcher, type ActiveMailboxSelection } from "./MailboxSwitcher";
 
 type Props = {
   me: Me;
+  mailboxes: Mailbox[];
+  activeMailboxId: ActiveMailboxSelection | null;
+  onSwitchMailbox: (id: ActiveMailboxSelection) => void;
+  onAddAccount: () => void;
+  onChangeMailboxColor?: (mailboxId: number, color: string) => void;
   calendars: CalendarSummary[];
   calendar: string;
   setCalendar: (n: string) => void;
@@ -13,7 +19,23 @@ type Props = {
   syncingInvites?: boolean;
 };
 
-export function Header({ me, calendars, calendar, setCalendar, eventCounts = {}, onNew, onLogout, onSyncInvites, syncingInvites }: Props) {
+export function Header({
+  me,
+  mailboxes,
+  activeMailboxId,
+  onSwitchMailbox,
+  onAddAccount,
+  onChangeMailboxColor,
+  calendars,
+  calendar,
+  setCalendar,
+  eventCounts = {},
+  onNew,
+  onLogout,
+  onSyncInvites,
+  syncingInvites,
+}: Props) {
+  const allActive = activeMailboxId === "all";
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -54,25 +76,45 @@ export function Header({ me, calendars, calendar, setCalendar, eventCounts = {},
           >
             Webmail
           </a>
+          {mailboxes.length > 0 && (
+            <div className="hidden sm:block">
+              <MailboxSwitcher
+                mailboxes={mailboxes}
+                activeId={activeMailboxId}
+                onSwitch={onSwitchMailbox}
+                onAddAccount={onAddAccount}
+                onChangeColor={onChangeMailboxColor}
+              />
+            </div>
+          )}
           <div className="hidden sm:block">
             <label className="text-[10px] font-medium uppercase tracking-wide text-ink-500">Calendar</label>
-            <select
-              value={calendar}
-              onChange={(e) => setCalendar(e.target.value)}
-              className="ml-2 rounded-md border border-ink-200 bg-white px-2 py-1 text-sm shadow-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
-            >
-              {calendars.length === 0 && <option value="">(default)</option>}
-              {calendars.map((c) => {
-                const count = eventCounts[c.name];
-                const suffix =
-                  count === undefined || count < 0 ? "" : ` (${count})`;
-                return (
-                  <option key={c.name} value={c.name}>
-                    {c.name}{suffix}
-                  </option>
-                );
-              })}
-            </select>
+            {allActive ? (
+              <span
+                className="ml-2 inline-flex items-center rounded-md border border-ink-200 bg-ink-50 px-2 py-1 text-sm text-ink-600"
+                title="Showing every calendar from every connected account"
+              >
+                All calendars
+              </span>
+            ) : (
+              <select
+                value={calendar}
+                onChange={(e) => setCalendar(e.target.value)}
+                className="ml-2 rounded-md border border-ink-200 bg-white px-2 py-1 text-sm shadow-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+              >
+                {calendars.length === 0 && <option value="">(default)</option>}
+                {calendars.map((c) => {
+                  const count = eventCounts[c.name];
+                  const suffix =
+                    count === undefined || count < 0 ? "" : ` (${count})`;
+                  return (
+                    <option key={c.name} value={c.name}>
+                      {c.name}{suffix}
+                    </option>
+                  );
+                })}
+              </select>
+            )}
           </div>
           {onSyncInvites && (
             <button

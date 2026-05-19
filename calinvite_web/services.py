@@ -338,6 +338,37 @@ def list_events(
     return out
 
 
+def list_calendar_names(creds: MailboxCreds) -> List[str]:
+    """Alias of `list_calendars`; named for symmetry with `list_events_all`."""
+    return list_calendars(creds)
+
+
+def list_events_all_calendars(
+    creds: MailboxCreds,
+    days: int,
+    start_override: Optional[datetime] = None,
+    end_override: Optional[datetime] = None,
+) -> List[tuple]:
+    """Iterate every calendar on a mailbox and merge their events into one
+    list. Returns a list of `(calendar_name, EventOut)` tuples so the caller
+    can tag events with their originating calendar before sending to the
+    client. Connections are opened sequentially per calendar (the underlying
+    `caldav` lib's `DAVClient` is not documented thread-safe; parallelism
+    happens one level up, across mailboxes)."""
+    names = list_calendars(creds)
+    out: List[tuple] = []
+    for cname in names:
+        try:
+            evs = list_events(creds, cname, days, start_override, end_override)
+        except Exception as e:
+            # One bad calendar shouldn't kill the whole mailbox's view.
+            print(f"[list_events_all_calendars] {creds.email}:{cname} failed: {e}")
+            continue
+        for ev in evs:
+            out.append((cname, ev))
+    return out
+
+
 def get_event(creds: MailboxCreds, calendar_name: Optional[str], uid: str) -> Optional[EventOut]:
     def _do():
         client = cdav.connect(creds.caldav_url, creds.email, creds.password)
@@ -470,18 +501,29 @@ def _send_invite(creds: MailboxCreds, spec: EventSpec, body: str, ics_bytes: byt
     return to
 
 
-def _schedule_email_reminders(user_id: Optional[int], uid: str, spec: EventSpec, inp: EventIn) -> None:
+def _schedule_email_reminders(
+    user_id: Optional[int],
+    mailbox_id: Optional[int],
+    uid: str,
+    spec: EventSpec,
+    inp: EventIn,
+) -> None:
     if user_id is None:
         return
     try:
         from .reminders import replace_for_event
-        replace_for_event(user_id, uid, spec.summary, spec.start, inp)
+        replace_for_event(user_id, uid, spec.summary, spec.start, inp, mailbox_id=mailbox_id)
     except Exception as e:
         # Don't fail the request if scheduling fails; the event itself is saved.
         print(f"[reminders] schedule failed for {uid}: {e}")
 
 
-def create_event(creds: MailboxCreds, inp: EventIn, user_id: Optional[int] = None) -> CreateEventResponse:
+def create_event(
+    creds: MailboxCreds,
+    inp: EventIn,
+    user_id: Optional[int] = None,
+    mailbox_id: Optional[int] = None,
+) -> CreateEventResponse:
     spec = _spec_from_input(inp, creds, sequence_override=0)
     ics_bytes, uid = build_request(spec)
 
@@ -491,7 +533,7 @@ def create_event(creds: MailboxCreds, inp: EventIn, user_id: Optional[int] = Non
         cdav.put_event(calendar, _strip_method(ics_bytes))
     _with_retry(_do_put)
 
-    _schedule_email_reminders(user_id, uid, spec, inp)
+    _schedule_email_reminders(user_id, mailbox_id, uid, spec, inp)
 
     sent: List[str] = []
     if not inp.dry_run:
@@ -500,7 +542,13 @@ def create_event(creds: MailboxCreds, inp: EventIn, user_id: Optional[int] = Non
     return CreateEventResponse(uid=uid, sent_to=sent, dry_run=inp.dry_run)
 
 
-def update_event(creds: MailboxCreds, uid: str, inp: EventIn, user_id: Optional[int] = None) -> CreateEventResponse:
+def update_event(
+    creds: MailboxCreds,
+    uid: str,
+    inp: EventIn,
+    user_id: Optional[int] = None,
+    mailbox_id: Optional[int] = None,
+) -> CreateEventResponse:
     if not uid:
         raise ValueError("uid is required for update")
     new_seq = int(inp.sequence) if inp.sequence is not None and int(inp.sequence) >= 1 else 1
@@ -514,7 +562,7 @@ def update_event(creds: MailboxCreds, uid: str, inp: EventIn, user_id: Optional[
         cdav.put_event(calendar, _strip_method(ics_bytes))
     _with_retry(_do_put)
 
-    _schedule_email_reminders(user_id, uid_out, spec, inp)
+    _schedule_email_reminders(user_id, mailbox_id, uid_out, spec, inp)
 
     sent: List[str] = []
     if not inp.dry_run:
@@ -523,7 +571,13 @@ def update_event(creds: MailboxCreds, uid: str, inp: EventIn, user_id: Optional[
     return CreateEventResponse(uid=uid_out, sent_to=sent, dry_run=inp.dry_run)
 
 
-def cancel_event(creds: MailboxCreds, uid: str, inp: EventIn, user_id: Optional[int] = None) -> CreateEventResponse:
+def cancel_event(
+    creds: MailboxCreds,
+    uid: str,
+    inp: EventIn,
+    user_id: Optional[int] = None,
+    mailbox_id: Optional[int] = None,
+) -> CreateEventResponse:
     if not uid:
         raise ValueError("uid is required for cancel")
     new_seq = int(inp.sequence) if inp.sequence is not None and int(inp.sequence) >= 1 else 1
@@ -545,7 +599,7 @@ def cancel_event(creds: MailboxCreds, uid: str, inp: EventIn, user_id: Optional[
     if user_id is not None:
         try:
             from .reminders import cancel_for_event
-            cancel_for_event(user_id, uid_out)
+            cancel_for_event(user_id, uid_out, mailbox_id=mailbox_id)
         except Exception as e:
             print(f"[reminders] cancel failed for {uid_out}: {e}")
 
@@ -556,26 +610,43 @@ def cancel_event(creds: MailboxCreds, uid: str, inp: EventIn, user_id: Optional[
     return CreateEventResponse(uid=uid_out, sent_to=sent, dry_run=inp.dry_run)
 
 
-def cancel_occurrence(user_id: int, event_uid: str, occurrence_start: datetime) -> None:
+def cancel_occurrence(
+    user_id: int,
+    event_uid: str,
+    occurrence_start: datetime,
+    mailbox_id: Optional[int] = None,
+) -> None:
     """Cancel a single occurrence of a recurring event.
 
+    `mailbox_id` selects which mailbox's CalDAV/SMTP to use. When omitted
+    (older clients) we fall back to the user's first mailbox.
+
     Steps:
-      1. Look up the user and mailbox creds.
-      2. Fetch the master VEVENT from CalDAV (across all calendars).
+      1. Look up the user's selected mailbox creds.
+      2. Fetch the master VEVENT from CalDAV (across all calendars on that
+         mailbox).
       3. Add an EXDATE for `occurrence_start`, bump SEQUENCE, PUT back.
       4. Build a per-occurrence iTIP CANCEL (same UID, RECURRENCE-ID, METHOD:CANCEL).
       5. Email the cancel notice to attendees.
       6. Delete the matching ScheduledReminder row (caller stamps declined_at).
     """
     from .db import SessionLocal as _SL
-    from .models import User as _User
+    from .models import Mailbox as _Mailbox, User as _User
     from .reminders import cancel_for_occurrence
 
     with _SL() as db:
         user = db.query(_User).filter(_User.id == user_id).one_or_none()
-        if user is None or user.mailbox is None:
+        if user is None or not user.mailboxes:
             raise RuntimeError("user or mailbox missing")
-        mb = user.mailbox
+        mb: Optional[_Mailbox] = None
+        if mailbox_id is not None:
+            mb = (
+                db.query(_Mailbox)
+                .filter(_Mailbox.id == mailbox_id, _Mailbox.user_id == user_id)
+                .one_or_none()
+            )
+        if mb is None:
+            mb = user.mailboxes[0]
         creds = creds_for(mb)
 
     def _find():
@@ -723,7 +794,7 @@ def cancel_occurrence(user_id: int, event_uid: str, occurrence_start: datetime) 
         print(f"[cancel_occurrence] email failed for {event_uid} @ {occ}: {e}")
 
     try:
-        cancel_for_occurrence(user_id, event_uid, occ)
+        cancel_for_occurrence(user_id, event_uid, occ, mailbox_id=mb.id)
     except Exception as e:
         print(f"[cancel_occurrence] reminder delete failed: {e}")
 

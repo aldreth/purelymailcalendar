@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, AuthRequiredError } from "./api";
-import type { CalendarSummary, EventIn, EventOut, Me } from "./types";
+import { ACTIVE_MAILBOX_KEY, api, AuthRequiredError } from "./api";
+import type { AppEvent, CalendarSummary, EventIn, EventOut, Mailbox, Me } from "./types";
+import type { ActiveMailboxSelection } from "./components/MailboxSwitcher";
 import { Header } from "./components/Header";
 import { EventsView } from "./components/EventsView";
 import { EventForm } from "./components/EventForm";
@@ -12,6 +13,7 @@ import { OnboardingView } from "./components/OnboardingView";
 import { UnofficialNote } from "./components/UnofficialNote";
 import { RunningSha } from "./components/RunningSha";
 import { ToastStack, type ToastMsg } from "./components/Toast";
+import { AddMailboxModal } from "./components/AddMailboxModal";
 import { addDays, buildMonthGrid, fmtTimeShort, startOfDay, startOfWeek } from "./util";
 import { useReminders } from "./useReminders";
 
@@ -19,7 +21,7 @@ type Tab = "calendar" | "events" | "rsvps";
 type FormState =
   | { open: false }
   | { open: true; mode: "create"; initial: null; prefillStart?: Date | null; prefillDurationMinutes?: number | null }
-  | { open: true; mode: "edit"; initial: EventOut };
+  | { open: true; mode: "edit"; initial: AppEvent };
 
 type Bootstrap =
   | { status: "loading" }
@@ -97,10 +99,35 @@ export default function App() {
 }
 
 function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => void; onAuthLost: () => void }) {
+  const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
+  const [activeMailboxId, setActiveMailboxIdState] = useState<ActiveMailboxSelection | null>(() => {
+    if (typeof window === "undefined") return null;
+    const raw = localStorage.getItem(ACTIVE_MAILBOX_KEY);
+    if (!raw) return null;
+    if (raw === "all") return "all";
+    if (!/^\d+$/.test(raw)) return null;
+    return Number(raw);
+  });
+  const setActiveMailboxId = useCallback((id: ActiveMailboxSelection | null) => {
+    setActiveMailboxIdState(id);
+    try {
+      if (id == null) localStorage.removeItem(ACTIVE_MAILBOX_KEY);
+      else localStorage.setItem(ACTIVE_MAILBOX_KEY, String(id));
+    } catch {
+      // private mode; non-fatal
+    }
+  }, []);
+  const allActive = activeMailboxId === "all";
+  const [showAddMailbox, setShowAddMailbox] = useState(false);
+
   const [calendars, setCalendars] = useState<CalendarSummary[]>([]);
   const [calendar, setCalendarState] = useState<string>(
     () => (typeof window !== "undefined" && localStorage.getItem("pmc.selectedCalendar")) || ""
   );
+  // Track which mailbox the current `calendar` choice was loaded for, so the
+  // calendar-load effect only fires when the user actually flips mailboxes
+  // (not on every render where calendars happen to be empty).
+  const calendarSeededForRef = useRef<number | null>(null);
   const setCalendar = useCallback((name: string) => {
     setCalendarState(name);
     try {
@@ -109,8 +136,33 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
       // localStorage can throw in private windows; non-fatal.
     }
   }, []);
+  // Persist the calendar choice back to the active mailbox so auto-sync and
+  // future sessions use it. Best-effort: a network glitch here shouldn't
+  // surface as an error to the user.
+  const persistSelectedCalendarRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!calendar) return;
+    if (activeMailboxId == null) return;
+    // In the All-accounts overlay there's no single mailbox to persist to;
+    // the Calendar dropdown is hidden there anyway.
+    if (activeMailboxId === "all") return;
+    if (persistSelectedCalendarRef.current === activeMailboxId) {
+      // Same mailbox: persist on changes only.
+    }
+    const active = mailboxes.find((m) => m.id === activeMailboxId);
+    if (active && active.selected_calendar === calendar) return;
+    persistSelectedCalendarRef.current = activeMailboxId;
+    api
+      .updateMailbox(activeMailboxId, { selected_calendar: calendar })
+      .then((updated) => {
+        setMailboxes((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+      })
+      .catch(() => {
+        // ignore
+      });
+  }, [calendar, activeMailboxId, mailboxes]);
 
-  const [events, setEvents] = useState<EventOut[]>([]);
+  const [events, setEvents] = useState<AppEvent[]>([]);
   const [eventCounts, setEventCounts] = useState<Record<string, number>>({});
   const [days, setDays] = useState(60);
   const [eventsLoading, setEventsLoading] = useState(false);
@@ -119,8 +171,8 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
   // confirmed yet (Purelymail's CalDAV has a propagation lag). We keep their
   // optimistic entries on every refresh until the server response includes
   // them.
-  const pendingUidsRef = useRef<Map<string, EventOut>>(new Map());
-  const markPending = useCallback((ev: EventOut) => {
+  const pendingUidsRef = useRef<Map<string, AppEvent>>(new Map());
+  const markPending = useCallback((ev: AppEvent) => {
     pendingUidsRef.current.set(ev.uid, ev);
   }, []);
   const clearPending = useCallback((uid: string) => {
@@ -210,7 +262,23 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
     setEventsLoading(true);
     setEventsError(null);
     try {
-      const list = await handle(() => api.events(calendar || undefined, days, fetchRange));
+      let list: AppEvent[] | undefined;
+      if (allActive) {
+        const out = await handle(() => api.eventsAll(days, fetchRange));
+        if (out) {
+          list = out.events;
+          if (out.partial_failures.length > 0) {
+            const names = out.partial_failures.map((f) => f.mailbox_email).join(", ");
+            pushToast(
+              "error",
+              `${out.partial_failures.length} mailbox${out.partial_failures.length === 1 ? "" : "es"} failed to load (${names}).`,
+            );
+          }
+        }
+      } else {
+        const raw = await handle(() => api.events(calendar || undefined, days, fetchRange));
+        list = raw;
+      }
       if (list) {
         const seenUids = new Set(list.map((e) => e.uid));
         // Server confirmed any pending UIDs that appear; drop them from pending.
@@ -219,7 +287,7 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
         }
         // Append still-pending optimistic events that the server hasn't picked
         // up yet, so they don't flicker off the calendar.
-        const extras: EventOut[] = [];
+        const extras: AppEvent[] = [];
         for (const ev of pendingUidsRef.current.values()) {
           if (!seenUids.has(ev.uid)) extras.push(ev);
         }
@@ -232,7 +300,7 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
     } finally {
       setEventsLoading(false);
     }
-  }, [calendar, days, fetchRange, handle]);
+  }, [allActive, calendar, days, fetchRange, handle, pushToast]);
 
   const onSyncInvites = useCallback(async () => {
     if (syncingInvites) return;
@@ -262,54 +330,115 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
     }
   }, [calendar, handle, pushToast, refreshEvents, syncingInvites]);
 
+  // Load all of the user's mailboxes and decide which one is active. If the
+  // stored activeMailboxId doesn't match any returned row (e.g. that mailbox
+  // got removed elsewhere) we fall back to the first one.
   useEffect(() => {
     (async () => {
       try {
+        const list = await handle(() => api.listMailboxes());
+        if (!list) return;
+        setMailboxes(list);
+        if (list.length === 0) return;
+        const stored = activeMailboxId;
+        const valid = stored != null && list.some((m) => m.id === stored);
+        if (!valid) {
+          setActiveMailboxId(list[0].id);
+        }
+      } catch (e: any) {
+        pushToast("error", `Accounts: ${e?.message || "could not load mailboxes"}`);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reload calendars + counts every time the active mailbox changes. The
+  // server uses X-Mailbox-Id from localStorage (set synchronously by
+  // setActiveMailboxId before we re-render), so re-running this effect is
+  // enough to pull data for the newly-active mailbox.
+  //
+  // When the user picks "All accounts" we skip the per-mailbox calendar
+  // dropdown entirely (the Header shows a static label instead) and let the
+  // event-fetch effect pull /api/events/all directly.
+  useEffect(() => {
+    if (activeMailboxId == null) return;
+    if (activeMailboxId === "all") {
+      calendarSeededForRef.current = -1; // poison so a flip back re-seeds
+      setCalendars([]);
+      setEventCounts({});
+      setCalendarState("");
+      return;
+    }
+    if (calendarSeededForRef.current === activeMailboxId) return;
+    calendarSeededForRef.current = activeMailboxId;
+    (async () => {
+      try {
         const c = await handle(() => api.calendars());
-        if (c) {
-          setCalendars(c);
-          // Honor the cached choice if it still exists on the server; otherwise
-          // pick the calendar with the most events; otherwise the first.
-          const cached = (typeof window !== "undefined" && localStorage.getItem("pmc.selectedCalendar")) || "";
-          if (!cached || !c.some((x) => x.name === cached)) {
-            if (c[0]) setCalendar(c[0].name);
-          }
-          // Fire counts in parallel so we can show them in the dropdown.
-          const entries = await Promise.all(
-            c.map(async (cal) => {
-              try {
-                const list = await api.events(cal.name, 60);
-                return [cal.name, list.length] as const;
-              } catch {
-                return [cal.name, -1] as const;
-              }
-            })
-          );
-          const counts: Record<string, number> = {};
-          for (const [n, v] of entries) counts[n] = v;
-          setEventCounts(counts);
-          // If nothing was selected yet and one calendar clearly has events,
-          // prefer that over the alphabetical default.
-          if (!cached) {
-            const best = c
-              .map((x) => ({ name: x.name, count: counts[x.name] ?? 0 }))
-              .filter((x) => x.count > 0)
-              .sort((a, b) => b.count - a.count)[0];
-            if (best) setCalendar(best.name);
-          }
+        if (!c) return;
+        setCalendars(c);
+        setEventCounts({});
+        const activeMailbox = mailboxes.find((m) => m.id === activeMailboxId);
+        // Per-mailbox preference wins. Otherwise the cached global choice if
+        // it still exists. Otherwise we let the count probe below pick the
+        // most-populated calendar.
+        const preferred = activeMailbox?.selected_calendar || "";
+        const cached = (typeof window !== "undefined" && localStorage.getItem("pmc.selectedCalendar")) || "";
+        let initial = "";
+        if (preferred && c.some((x) => x.name === preferred)) initial = preferred;
+        else if (cached && c.some((x) => x.name === cached)) initial = cached;
+        else if (c[0]) initial = c[0].name;
+        if (initial) setCalendar(initial);
+
+        const entries = await Promise.all(
+          c.map(async (cal) => {
+            try {
+              const evList = await api.events(cal.name, 60);
+              return [cal.name, evList.length] as const;
+            } catch {
+              return [cal.name, -1] as const;
+            }
+          })
+        );
+        const counts: Record<string, number> = {};
+        for (const [n, v] of entries) counts[n] = v;
+        setEventCounts(counts);
+        // Only auto-pick the busiest calendar when neither a per-mailbox
+        // preference nor a cached choice applied.
+        if (!preferred && !cached) {
+          const best = c
+            .map((x) => ({ name: x.name, count: counts[x.name] ?? 0 }))
+            .filter((x) => x.count > 0)
+            .sort((a, b) => b.count - a.count)[0];
+          if (best) setCalendar(best.name);
         }
       } catch (e: any) {
         pushToast("error", `Config: ${e?.message || "could not load calendars"}`);
       }
     })();
-  }, [pushToast, handle, setCalendar]);
+  }, [activeMailboxId, mailboxes, pushToast, handle, setCalendar]);
 
   useEffect(() => {
     refreshEvents();
   }, [refreshEvents]);
 
-  const onCreateClick = () => setForm({ open: true, mode: "create", initial: null });
-  const onCreateAt = (start: Date, durationMinutes?: number) =>
+  const onCreateClick = () => {
+    if (allActive) {
+      pushToast(
+        "error",
+        "Pick a single account to create events. The Send-from picker arrives in the next update.",
+      );
+      return;
+    }
+    setForm({ open: true, mode: "create", initial: null });
+  };
+  const onCreateAt = (start: Date, durationMinutes?: number) => {
+    if (allActive) {
+      pushToast(
+        "error",
+        "Pick a single account to create events. The Send-from picker arrives in the next update.",
+      );
+      return;
+    }
     setForm({
       open: true,
       mode: "create",
@@ -317,6 +446,7 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
       prefillStart: start,
       prefillDurationMinutes: durationMinutes ?? null,
     });
+  };
   const onEditClick = (e: EventOut) => setForm({ open: true, mode: "edit", initial: e });
 
   const onMoveEvent = async (e: EventOut, newStart: Date) => {
@@ -350,7 +480,8 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
       sequence: e.sequence + 1,
     };
     try {
-      const r = await handle(() => api.updateEvent(e.uid, body));
+      const mailboxId = (e as AppEvent).mailbox_id;
+      const r = await handle(() => api.updateEvent(e.uid, body, mailboxId != null ? { mailboxId } : undefined));
       if (!r) return;
       const optimistic = buildOptimisticEvent(body, r.uid, me);
       markPending(optimistic);
@@ -381,7 +512,10 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
       sequence: e.sequence + 1,
     };
     try {
-      const res = await handle(() => api.cancelEvent(e.master_uid || e.uid, body));
+      const mailboxId = (e as AppEvent).mailbox_id;
+      const res = await handle(() =>
+        api.cancelEvent(e.master_uid || e.uid, body, mailboxId != null ? { mailboxId } : undefined),
+      );
       if (!res) return;
       clearPending(e.master_uid || e.uid);
       const masterUid = e.master_uid || e.uid;
@@ -403,7 +537,10 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
   const cancelOneOccurrence = async (e: EventOut) => {
     try {
       const masterUid = e.master_uid || e.uid;
-      const res = await handle(() => api.cancelOccurrence(masterUid, e.start));
+      const mailboxId = (e as AppEvent).mailbox_id;
+      const res = await handle(() =>
+        api.cancelOccurrence(masterUid, e.start, mailboxId != null ? { mailboxId } : undefined),
+      );
       if (!res) return;
       const occId = e.occurrence_id;
       setEvents((prev) => prev.filter((x) => (occId ? x.occurrence_id !== occId : x.uid !== e.uid)));
@@ -425,6 +562,12 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
 
   const submitForm = async (body: EventIn, mode: "create" | "edit", uid: string | null) => {
     const payload: EventIn = { ...body, calendar: calendar || body.calendar };
+    // For edit, the mailbox is locked to whichever mailbox the event lives
+    // on. We grab it from the original form initial event.
+    const editMailboxId =
+      mode === "edit" && form.open && form.mode === "edit"
+        ? (form.initial as AppEvent).mailbox_id
+        : undefined;
     if (mode === "create") {
       const r = await handle(() => api.createEvent(payload));
       if (!r) return;
@@ -440,7 +583,9 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
           : `Created. UID ${r.uid.slice(0, 16)}…`
       );
     } else {
-      const r = await handle(() => api.updateEvent(uid!, payload));
+      const r = await handle(() =>
+        api.updateEvent(uid!, payload, editMailboxId != null ? { mailboxId: editMailboxId } : undefined),
+      );
       if (!r) return;
       const optimistic = buildOptimisticEvent(payload, r.uid, me);
       markPending(optimistic);
@@ -461,13 +606,39 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
     <div className="min-h-full">
       <Header
         me={me}
+        mailboxes={mailboxes}
+        activeMailboxId={activeMailboxId}
+        onSwitchMailbox={(id) => {
+          if (id === activeMailboxId) return;
+          setActiveMailboxId(id);
+          // Drop the previously-cached generic calendar choice so the per-
+          // mailbox preference takes precedence when calendars reload.
+          try { localStorage.removeItem("pmc.selectedCalendar"); } catch { /* ignore */ }
+          setCalendarState("");
+          setCalendars([]);
+          setEventCounts({});
+          setEvents([]);
+        }}
+        onAddAccount={() => setShowAddMailbox(true)}
+        onChangeMailboxColor={(mailboxId, color) => {
+          // Optimistic update first so the chip flips immediately.
+          setMailboxes((prev) => prev.map((m) => (m.id === mailboxId ? { ...m, color } : m)));
+          api
+            .updateMailbox(mailboxId, { color })
+            .then((updated) => {
+              setMailboxes((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+            })
+            .catch((e: any) => {
+              pushToast("error", e?.message || "could not save color");
+            });
+        }}
         calendars={calendars}
         calendar={calendar}
         setCalendar={setCalendar}
         eventCounts={eventCounts}
         onNew={onCreateClick}
         onLogout={onSignOut}
-        onSyncInvites={onSyncInvites}
+        onSyncInvites={allActive ? undefined : onSyncInvites}
         syncingInvites={syncingInvites}
       />
 
@@ -519,10 +690,9 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
 
         <footer className="mt-12 border-t border-accent-900/20 pt-6 pb-10">
           <p className="font-serif text-sm italic leading-relaxed text-ink-700">
-            <span className="not-italic text-accent-900">Colophon.</span> Purelymail
-            Calendar is set in Newsreader and the system sans, served from a single
-            Python container on Railway, with calendar storage on Purelymail's
-            CalDAV. Source on GitHub. Reproducible via the public image at
+            Purelymail Calendar is served from a single Python container on
+            Railway, with calendar storage on Purelymail's CalDAV. Source on
+            GitHub. Reproducible via the public image at
             ghcr.io/bhartiyashesh/purelymailcalendar.
           </p>
           <div className="mt-4 flex flex-col items-start gap-2">
@@ -545,6 +715,27 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
           onCancelEvent={(ev) => {
             setForm({ open: false });
             onCancelClick(ev);
+          }}
+        />
+      )}
+
+      {showAddMailbox && (
+        <AddMailboxModal
+          onClose={() => setShowAddMailbox(false)}
+          onAdded={(mb) => {
+            setShowAddMailbox(false);
+            setMailboxes((prev) => {
+              if (prev.some((x) => x.id === mb.id)) return prev;
+              return [...prev, mb];
+            });
+            // Switch into the freshly-connected mailbox.
+            setActiveMailboxId(mb.id);
+            try { localStorage.removeItem("pmc.selectedCalendar"); } catch { /* ignore */ }
+            setCalendarState("");
+            setCalendars([]);
+            setEventCounts({});
+            setEvents([]);
+            pushToast("success", `Connected ${mb.email}.`);
           }}
         />
       )}

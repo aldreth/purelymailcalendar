@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EventOut } from "../types";
+import { eventStripeStyle } from "../mailboxColors";
 import {
   addMinutes,
   buildWeekDays,
@@ -342,6 +343,7 @@ export function WeekView({ anchorDate, events, onCreateAt, onEdit, onMove, daysC
                       height: heightPx,
                       left: `${leftPct}%`,
                       width: `calc(${widthPct}% - 2px)`,
+                      ...eventStripeStyle(ev),
                     }}
                     title={ev.recurrence ? `${ev.summary} (${ev.recurrence.text})` : ev.summary}
                   >

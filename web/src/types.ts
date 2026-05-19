@@ -6,10 +6,32 @@ export type Me = {
 };
 
 export type Mailbox = {
+  id: number;
   email: string;
   display_name: string;
   account_id: string;
   caldav_url: string;
+  selected_calendar?: string | null;
+  color?: string | null;
+};
+
+export type MailboxFailure = {
+  mailbox_id: number;
+  mailbox_email: string;
+  error: string;
+};
+
+export type MailboxCalendar = {
+  mailbox_id: number;
+  mailbox_email: string;
+  mailbox_display_name: string;
+  mailbox_color?: string | null;
+  name: string;
+};
+
+export type MailboxCalendarsAll = {
+  calendars: MailboxCalendar[];
+  partial_failures: MailboxFailure[];
 };
 
 export type CalendarSummary = {
@@ -128,4 +150,29 @@ export type RsvpPollIn = {
 export type RsvpPollOut = {
   mailbox: string;
   results: RsvpResultOut[];
+};
+
+export type MailboxEventOut = EventOut & {
+  mailbox_id: number;
+  mailbox_email: string;
+  mailbox_display_name: string;
+  mailbox_color?: string | null;
+  calendar_name?: string | null;
+};
+
+// Union shape the app uses for in-memory event state. Single-mailbox view
+// produces bare `EventOut` rows; the All-accounts overlay produces
+// `MailboxEventOut`. Optional fields are present iff the row came from the
+// overlay endpoint, so mutation code can route via `ev.mailbox_id` when set.
+export type AppEvent = EventOut & {
+  mailbox_id?: number;
+  mailbox_email?: string;
+  mailbox_display_name?: string;
+  mailbox_color?: string | null;
+  calendar_name?: string | null;
+};
+
+export type MailboxEventsAll = {
+  events: MailboxEventOut[];
+  partial_failures: MailboxFailure[];
 };

@@ -24,16 +24,34 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(), default=_utcnow, nullable=False)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(), nullable=True)
 
-    mailbox: Mapped[Optional["Mailbox"]] = relationship("Mailbox", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    mailboxes: Mapped[list["Mailbox"]] = relationship(
+        "Mailbox",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="Mailbox.id",
+    )
     sessions: Mapped[list["UserSession"]] = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
+
+    @property
+    def mailbox(self) -> Optional["Mailbox"]:
+        """First mailbox (the user's primary). Kept for back-compat with the
+        original single-mailbox model. New code should iterate `mailboxes`
+        or use the X-Mailbox-Id-resolved object from `current_mailbox`."""
+        return self.mailboxes[0] if self.mailboxes else None
 
 
 class Mailbox(Base):
-    """A user's Purelymail mailbox: CalDAV + SMTP + IMAP creds."""
+    """A user's Purelymail mailbox: CalDAV + SMTP + IMAP creds.
+
+    A user can have multiple mailboxes (personal + work + ...). The active
+    one for a given request is selected by the X-Mailbox-Id header on the
+    client side; the server resolves it via `current_mailbox` and defaults
+    to the first mailbox when the header is absent.
+    """
     __tablename__ = "mailboxes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     email: Mapped[str] = mapped_column(String(254), nullable=False)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
     account_id: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -42,10 +60,17 @@ class Mailbox(Base):
     smtp_port: Mapped[int] = mapped_column(Integer, default=465, nullable=False)
     imap_host: Mapped[str] = mapped_column(String(120), default="imap.purelymail.com", nullable=False)
     imap_port: Mapped[int] = mapped_column(Integer, default=993, nullable=False)
+    # The CalDAV calendar this mailbox prefers (used by auto-sync and seeded
+    # into the UI dropdown when the user switches to this mailbox).
+    selected_calendar: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Hex color used to tint this mailbox's events in the All-accounts overlay
+    # view. Nullable so the UI can fall back to a palette index derived from
+    # `id` when the user hasn't picked one.
+    color: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(), default=_utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(), default=_utcnow, onupdate=_utcnow, nullable=False)
 
-    user: Mapped[User] = relationship("User", back_populates="mailbox")
+    user: Mapped[User] = relationship("User", back_populates="mailboxes")
 
     @property
     def caldav_url(self) -> str:
@@ -81,6 +106,10 @@ class ScheduledReminder(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    # Which mailbox the reminder was scheduled from. Nullable for back-compat
+    # with rows written before multi-mailbox; tick falls back to the user's
+    # first mailbox in that case.
+    mailbox_id: Mapped[Optional[int]] = mapped_column(ForeignKey("mailboxes.id", ondelete="CASCADE"), index=True, nullable=True)
     event_uid: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
     event_summary: Mapped[str] = mapped_column(String(500), nullable=False)
     event_start: Mapped[datetime] = mapped_column(DateTime(), nullable=False)
