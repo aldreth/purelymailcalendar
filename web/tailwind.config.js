@@ -4,7 +4,10 @@ export default {
   theme: {
     extend: {
       fontFamily: {
+        // Inter for all UI text. Loaded from Google Fonts in index.html;
+        // system sans is the fallback until the swap.
         sans: [
+          "Inter",
           "ui-sans-serif",
           "system-ui",
           "-apple-system",
@@ -15,9 +18,22 @@ export default {
           "sans-serif",
         ],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
-        // Editorial display serif. Used for headlines, datelines, and the
-        // wordmark; body type stays sans.
+        // `font-serif` now also resolves to Inter so the existing
+        // `font-serif` classes across the app pick up the new face
+        // without a rename pass. Use `font-editorial` for the actual
+        // serif (about page only).
         serif: [
+          "Inter",
+          "ui-sans-serif",
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "Roboto",
+          "Helvetica",
+          "Arial",
+          "sans-serif",
+        ],
+        editorial: [
           "Newsreader",
           "ui-serif",
           "Georgia",

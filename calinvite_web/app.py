@@ -430,19 +430,37 @@ def sync_invites_endpoint(
 
 
 _static_dir = Path(__file__).resolve().parent.parent / "web" / "dist"
+# In dev we don't have a `dist/` build but the source still has the
+# about page at `web/public/about.html`. Mount a dedicated /about route
+# that reads from whichever location is present, so navigating to
+# /about works both in dev (Vite proxies to us) and in prod.
+_about_candidates = [
+    Path(__file__).resolve().parent.parent / "web" / "dist" / "about.html",
+    Path(__file__).resolve().parent.parent / "web" / "public" / "about.html",
+]
+
+
+def _find_about() -> Optional[Path]:
+    for p in _about_candidates:
+        if p.is_file():
+            return p
+    return None
+
+
+_about_path = _find_about()
+if _about_path is not None:
+    @app.get("/about")
+    @app.get("/about/")
+    def about_page_dev():
+        path = _find_about() or _about_path
+        return FileResponse(path)
+
+
 if _static_dir.is_dir():
     app.mount("/assets", StaticFiles(directory=_static_dir / "assets"), name="assets")
 
     @app.get("/")
     def index():
-        return FileResponse(_static_dir / "index.html")
-
-    @app.get("/about")
-    @app.get("/about/")
-    def about_page():
-        about_html = _static_dir / "about.html"
-        if about_html.is_file():
-            return FileResponse(about_html)
         return FileResponse(_static_dir / "index.html")
 
     @app.get("/{full_path:path}")

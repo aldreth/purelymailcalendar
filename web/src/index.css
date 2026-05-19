@@ -6,8 +6,26 @@
   html, body, #root {
     height: 100%;
   }
+  html {
+    /* Inter renders best with these OpenType features on. */
+    font-feature-settings: "cv11", "ss01", "ss03";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
   body {
-    @apply text-ink-800 antialiased;
+    /* Slightly larger base size and a calmer line-height so reading
+     * doesn't feel cramped. Inter handles the bump well. */
+    @apply text-ink-800 antialiased font-sans;
+    font-size: 15px;
+    line-height: 1.55;
+    letter-spacing: -0.005em;
+  }
+  h1, h2, h3, h4 {
+    /* Tighten heading tracking; Inter looks crisper at slightly
+     * negative letter-spacing in display sizes. */
+    letter-spacing: -0.015em;
+    font-weight: 600;
   }
   input, select, textarea {
     @apply bg-white;

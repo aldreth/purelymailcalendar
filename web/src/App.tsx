@@ -76,6 +76,14 @@ export default function App() {
   }, [bootstrap]);
 
   // Routing for non-app pages.
+  if (route === "/about" || route === "/about/") {
+    // In prod the FastAPI app serves /about directly. In dev Vite's
+    // SPA fallback wins over its proxy for this exact path, so the
+    // SPA loads first and bounces the user to /about.html (which Vite
+    // serves correctly from public/).
+    if (typeof window !== "undefined") window.location.replace("/about.html");
+    return null;
+  }
   if (route === "/auth/verify") {
     return <VerifyView onDone={() => { setRoute("/"); window.history.replaceState({}, "", "/"); bootstrap(); }} />;
   }
