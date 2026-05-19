@@ -144,3 +144,40 @@ class RsvpPollIn(BaseModel):
 class RsvpPollOut(BaseModel):
     mailbox: str
     results: List[RsvpResultOut]
+
+
+# ---------------------------------------------------------------------------
+# All-accounts overlay (phase 2)
+# ---------------------------------------------------------------------------
+
+
+class MailboxFailureOut(BaseModel):
+    mailbox_id: int
+    mailbox_email: str
+    error: str
+
+
+class MailboxCalendarOut(BaseModel):
+    mailbox_id: int
+    mailbox_email: str
+    mailbox_display_name: str
+    mailbox_color: Optional[str] = None
+    name: str
+
+
+class MailboxCalendarsAllOut(BaseModel):
+    calendars: List[MailboxCalendarOut]
+    partial_failures: List[MailboxFailureOut] = []
+
+
+class MailboxEventOut(EventOut):
+    mailbox_id: int
+    mailbox_email: str
+    mailbox_display_name: str
+    mailbox_color: Optional[str] = None
+    calendar_name: Optional[str] = None
+
+
+class MailboxEventsAllOut(BaseModel):
+    events: List[MailboxEventOut]
+    partial_failures: List[MailboxFailureOut] = []

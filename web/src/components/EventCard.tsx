@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { EventOut } from "../types";
+import type { AppEvent, EventOut } from "../types";
+import { eventStripeStyle } from "../mailboxColors";
 import { fmtRange, partstatStyle } from "../util";
 
 type Props = {
@@ -10,13 +11,14 @@ type Props = {
 
 export function EventCard({ event, onEdit, onCancel }: Props) {
   const [open, setOpen] = useState(false);
+  const overlayEvent = event as AppEvent;
   const counts = event.attendees.reduce<Record<string, number>>((acc, a) => {
     const k = (a.partstat || "NEEDS-ACTION").toUpperCase();
     acc[k] = (acc[k] || 0) + 1;
     return acc;
   }, {});
   return (
-    <div className="card overflow-hidden">
+    <div className="card overflow-hidden" style={eventStripeStyle(overlayEvent)}>
       <button
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-ink-50"
@@ -50,6 +52,15 @@ export function EventCard({ event, onEdit, onCancel }: Props) {
       </button>
       {open && (
         <div className="border-t border-ink-100 bg-ink-50/40 px-4 py-3">
+          {overlayEvent.mailbox_email && (
+            <p className="mb-2 text-xs text-ink-500">
+              From{" "}
+              <span className="font-medium text-ink-800">
+                {overlayEvent.mailbox_display_name || overlayEvent.mailbox_email}
+              </span>
+              {overlayEvent.calendar_name ? ` / ${overlayEvent.calendar_name}` : ""}
+            </p>
+          )}
           {event.description && (
             <p className="mb-3 whitespace-pre-wrap text-sm text-ink-700">{event.description}</p>
           )}

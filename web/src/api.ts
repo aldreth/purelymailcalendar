@@ -5,6 +5,8 @@ import type {
   EventIn,
   EventOut,
   Mailbox,
+  MailboxCalendarsAll,
+  MailboxEventsAll,
   Me,
   RsvpPollIn,
   RsvpPollOut,
@@ -17,12 +19,30 @@ export class AuthRequiredError extends Error {
   }
 }
 
+export const ACTIVE_MAILBOX_KEY = "pmc.activeMailboxId";
+
+function mailboxOverrideHeader(opts?: { mailboxId?: number }): Record<string, string> | undefined {
+  if (opts?.mailboxId == null) return undefined;
+  return { "X-Mailbox-Id": String(opts.mailboxId) };
+}
+
+function activeMailboxIdHeader(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const raw = localStorage.getItem(ACTIVE_MAILBOX_KEY);
+  if (!raw) return {};
+  // Reject obvious junk so an empty/invalid stored id doesn't poison every
+  // request with a 400 from the server.
+  if (!/^\d+$/.test(raw)) return {};
+  return { "X-Mailbox-Id": raw };
+}
+
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
   const res = await fetch(input, {
     ...init,
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      ...activeMailboxIdHeader(),
       ...(init?.headers || {}),
     },
   });
@@ -54,7 +74,7 @@ export const api = {
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
   me: () => request<Me>("/api/auth/me"),
 
-  // mailbox
+  // mailbox (legacy singular: still used during initial onboarding)
   getMailbox: () => request<Mailbox | null>("/api/me/mailbox"),
   connectMailbox: (email: string, password: string, display_name?: string) =>
     request<Mailbox>("/api/me/mailbox", {
@@ -63,8 +83,36 @@ export const api = {
     }),
   deleteMailbox: () => request<{ ok: boolean }>("/api/me/mailbox", { method: "DELETE" }),
 
+  // mailbox (plural: multi-account)
+  listMailboxes: () => request<Mailbox[]>("/api/me/mailboxes"),
+  addMailbox: (email: string, password: string, display_name?: string) =>
+    request<Mailbox>("/api/me/mailboxes", {
+      method: "POST",
+      body: JSON.stringify({ email, password, display_name }),
+    }),
+  updateMailbox: (
+    id: number,
+    body: { display_name?: string; selected_calendar?: string | null; color?: string | null },
+  ) =>
+    request<Mailbox>(`/api/me/mailboxes/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteMailboxById: (id: number) =>
+    request<{ ok: boolean }>(`/api/me/mailboxes/${id}`, { method: "DELETE" }),
+
   // data
   calendars: () => request<CalendarSummary[]>("/api/calendars"),
+  calendarsAll: () => request<MailboxCalendarsAll>("/api/calendars/all"),
+  eventsAll: (days = 60, range?: { from: Date; to: Date }) => {
+    const q = new URLSearchParams();
+    q.set("days", String(days));
+    if (range) {
+      q.set("start", range.from.toISOString());
+      q.set("end", range.to.toISOString());
+    }
+    return request<MailboxEventsAll>(`/api/events/all?${q.toString()}`);
+  },
   events: (
     calendar?: string,
     days = 60,
@@ -79,25 +127,29 @@ export const api = {
     }
     return request<EventOut[]>(`/api/events?${q.toString()}`);
   },
-  createEvent: (body: EventIn) =>
+  createEvent: (body: EventIn, opts?: { mailboxId?: number }) =>
     request<CreateEventResponse>("/api/events", {
       method: "POST",
       body: JSON.stringify(body),
+      headers: mailboxOverrideHeader(opts),
     }),
-  updateEvent: (uid: string, body: EventIn) =>
+  updateEvent: (uid: string, body: EventIn, opts?: { mailboxId?: number }) =>
     request<CreateEventResponse>(`/api/events/${encodeURIComponent(uid)}`, {
       method: "PUT",
       body: JSON.stringify(body),
+      headers: mailboxOverrideHeader(opts),
     }),
-  cancelEvent: (uid: string, body: EventIn) =>
+  cancelEvent: (uid: string, body: EventIn, opts?: { mailboxId?: number }) =>
     request<CancelEventResponse>(`/api/events/${encodeURIComponent(uid)}/cancel`, {
       method: "POST",
       body: JSON.stringify(body),
+      headers: mailboxOverrideHeader(opts),
     }),
-  cancelOccurrence: (uid: string, occurrenceStartIso: string) =>
+  cancelOccurrence: (uid: string, occurrenceStartIso: string, opts?: { mailboxId?: number }) =>
     request<{ ok: boolean }>(`/api/events/${encodeURIComponent(uid)}/cancel-occurrence`, {
       method: "POST",
       body: JSON.stringify({ occurrence_start: occurrenceStartIso }),
+      headers: mailboxOverrideHeader(opts),
     }),
   pollRsvps: (body: RsvpPollIn) =>
     request<RsvpPollOut>("/api/rsvps/poll", {

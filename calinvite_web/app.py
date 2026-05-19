@@ -13,15 +13,20 @@ from fastapi.staticfiles import StaticFiles
 from . import services
 from .auth import current_user, router as auth_router
 from .db import Base, engine
-from .mailbox import router as mailbox_router
+from .mailbox import current_mailbox, router as mailbox_router
 from .reminders import router as reminders_router
-from .models import User
+from .models import Mailbox, User
 from .schemas import (
     CalendarOut,
     CancelEventResponse,
     CreateEventResponse,
     EventIn,
     EventOut,
+    MailboxCalendarOut,
+    MailboxCalendarsAllOut,
+    MailboxEventOut,
+    MailboxEventsAllOut,
+    MailboxFailureOut,
     RsvpPollIn,
     RsvpPollOut,
 )
@@ -59,6 +64,16 @@ def _startup() -> None:
         "ALTER TABLE scheduled_reminders ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMP",
         "ALTER TABLE scheduled_reminders ADD COLUMN IF NOT EXISTS declined_at TIMESTAMP",
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_scheduled_reminders_confirm_token ON scheduled_reminders (confirm_token)",
+        # Multi-mailbox: drop the old user-uniqueness on mailboxes, add the
+        # selected_calendar column, and tag reminders with their owning
+        # mailbox. All best-effort and idempotent.
+        "ALTER TABLE mailboxes DROP CONSTRAINT IF EXISTS mailboxes_user_id_key",
+        "ALTER TABLE mailboxes ADD COLUMN IF NOT EXISTS selected_calendar VARCHAR(255)",
+        "CREATE INDEX IF NOT EXISTS ix_mailboxes_user_id ON mailboxes (user_id)",
+        "ALTER TABLE scheduled_reminders ADD COLUMN IF NOT EXISTS mailbox_id INTEGER REFERENCES mailboxes(id) ON DELETE CASCADE",
+        "CREATE INDEX IF NOT EXISTS ix_scheduled_reminders_mailbox_id ON scheduled_reminders (mailbox_id)",
+        # All-accounts overlay (phase 2a): user-pickable hex color per mailbox.
+        "ALTER TABLE mailboxes ADD COLUMN IF NOT EXISTS color VARCHAR(16)",
     ]
     with engine.begin() as conn:
         for s in stmts:
@@ -75,10 +90,8 @@ from .admin import router as admin_router  # noqa: E402  (intentional late impor
 app.include_router(admin_router)
 
 
-def _creds(user: User) -> services.MailboxCreds:
-    if user.mailbox is None:
-        raise HTTPException(status_code=412, detail="No mailbox connected. POST /api/me/mailbox first.")
-    return services.creds_for(user.mailbox)
+def _creds(mb: Mailbox) -> services.MailboxCreds:
+    return services.creds_for(mb)
 
 
 @app.get("/api/health")
@@ -108,8 +121,8 @@ def version():
 
 
 @app.get("/api/calendars", response_model=List[CalendarOut])
-def get_calendars(user: User = Depends(current_user)):
-    creds = _creds(user)
+def get_calendars(mailbox: Mailbox = Depends(current_mailbox)):
+    creds = _creds(mailbox)
     try:
         return [{"name": n} for n in services.list_calendars(creds)]
     except Exception as e:
@@ -122,11 +135,11 @@ def get_events(
     calendar: Optional[str] = None,
     start: Optional[str] = Query(None, description="ISO-8601 start of fetch window. If set with `end`, overrides `days`."),
     end: Optional[str] = Query(None, description="ISO-8601 end of fetch window. If set with `start`, overrides `days`."),
-    user: User = Depends(current_user),
+    mailbox: Mailbox = Depends(current_mailbox),
 ):
     from datetime import datetime, timezone
 
-    creds = _creds(user)
+    creds = _creds(mailbox)
     start_override = None
     end_override = None
     if start and end:
@@ -151,9 +164,120 @@ def get_events(
         raise HTTPException(status_code=502, detail=f"CalDAV error: {e}")
 
 
+# ---------------------------------------------------------------------------
+# All-accounts overlay (phase 2a)
+# Registered above /api/events/{uid} so FastAPI matches the literal `all`
+# path before falling through to the {uid} parameterized route.
+# ---------------------------------------------------------------------------
+
+
+def _mailbox_failure(mb, exc: Exception) -> MailboxFailureOut:
+    return MailboxFailureOut(
+        mailbox_id=mb.id,
+        mailbox_email=mb.email,
+        error=str(exc)[:500],
+    )
+
+
+@app.get("/api/calendars/all", response_model=MailboxCalendarsAllOut)
+def get_calendars_all(user: User = Depends(current_user)):
+    import concurrent.futures as _futures
+
+    mailboxes = list(user.mailboxes)
+    if not mailboxes:
+        return MailboxCalendarsAllOut(calendars=[], partial_failures=[])
+
+    def _one(mb: Mailbox):
+        creds = services.creds_for(mb)
+        return services.list_calendar_names(creds)
+
+    rows: list[MailboxCalendarOut] = []
+    fails: list[MailboxFailureOut] = []
+    workers = min(len(mailboxes), 4)
+    with _futures.ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = {ex.submit(_one, mb): mb for mb in mailboxes}
+        for fut in _futures.as_completed(futures):
+            mb = futures[fut]
+            try:
+                for name in fut.result(timeout=20):
+                    rows.append(MailboxCalendarOut(
+                        mailbox_id=mb.id,
+                        mailbox_email=mb.email,
+                        mailbox_display_name=mb.display_name,
+                        mailbox_color=mb.color,
+                        name=name,
+                    ))
+            except Exception as e:
+                fails.append(_mailbox_failure(mb, e))
+    rows.sort(key=lambda r: (r.mailbox_id, r.name.lower()))
+    return MailboxCalendarsAllOut(calendars=rows, partial_failures=fails)
+
+
+@app.get("/api/events/all", response_model=MailboxEventsAllOut)
+def get_events_all(
+    days: int = Query(60, ge=1, le=365),
+    start: Optional[str] = Query(None, description="ISO-8601 start of fetch window. If set with `end`, overrides `days`."),
+    end: Optional[str] = Query(None, description="ISO-8601 end of fetch window. If set with `start`, overrides `days`."),
+    user: User = Depends(current_user),
+):
+    import concurrent.futures as _futures
+    from datetime import datetime, timezone
+
+    mailboxes = list(user.mailboxes)
+    if not mailboxes:
+        return MailboxEventsAllOut(events=[], partial_failures=[])
+
+    start_override = None
+    end_override = None
+    if start and end:
+        try:
+            sd = datetime.fromisoformat(start.replace("Z", "+00:00"))
+            ed = datetime.fromisoformat(end.replace("Z", "+00:00"))
+            if sd.tzinfo is None:
+                sd = sd.replace(tzinfo=timezone.utc)
+            if ed.tzinfo is None:
+                ed = ed.replace(tzinfo=timezone.utc)
+            if ed <= sd:
+                raise HTTPException(status_code=400, detail="`end` must be after `start`")
+            start_override = sd
+            end_override = ed
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"invalid start/end: {e}")
+
+    def _one(mb: Mailbox):
+        creds = services.creds_for(mb)
+        return services.list_events_all_calendars(creds, days, start_override, end_override)
+
+    events: list[MailboxEventOut] = []
+    fails: list[MailboxFailureOut] = []
+    workers = min(len(mailboxes), 4)
+    with _futures.ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = {ex.submit(_one, mb): mb for mb in mailboxes}
+        for fut in _futures.as_completed(futures):
+            mb = futures[fut]
+            try:
+                pairs = fut.result(timeout=25)
+            except Exception as e:
+                fails.append(_mailbox_failure(mb, e))
+                continue
+            for cname, ev in pairs:
+                events.append(MailboxEventOut(
+                    **ev.model_dump(),
+                    mailbox_id=mb.id,
+                    mailbox_email=mb.email,
+                    mailbox_display_name=mb.display_name,
+                    mailbox_color=mb.color,
+                    calendar_name=cname,
+                ))
+    events.sort(key=lambda e: e.start)
+    return MailboxEventsAllOut(events=events, partial_failures=fails)
+
+
 @app.get("/api/events/{uid}", response_model=EventOut)
-def get_event(uid: str, calendar: Optional[str] = None, user: User = Depends(current_user)):
-    creds = _creds(user)
+def get_event(uid: str, calendar: Optional[str] = None, mailbox: Mailbox = Depends(current_mailbox)):
+    creds = _creds(mailbox)
     ev = services.get_event(creds, calendar, uid)
     if ev is None:
         raise HTTPException(status_code=404, detail="event not found")
@@ -161,10 +285,10 @@ def get_event(uid: str, calendar: Optional[str] = None, user: User = Depends(cur
 
 
 @app.post("/api/events", response_model=CreateEventResponse)
-def post_event(body: EventIn, user: User = Depends(current_user)):
-    creds = _creds(user)
+def post_event(body: EventIn, user: User = Depends(current_user), mailbox: Mailbox = Depends(current_mailbox)):
+    creds = _creds(mailbox)
     try:
-        return services.create_event(creds, body, user_id=user.id)
+        return services.create_event(creds, body, user_id=user.id, mailbox_id=mailbox.id)
     except (RuntimeError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -172,10 +296,10 @@ def post_event(body: EventIn, user: User = Depends(current_user)):
 
 
 @app.put("/api/events/{uid}", response_model=CreateEventResponse)
-def put_event(uid: str, body: EventIn, user: User = Depends(current_user)):
-    creds = _creds(user)
+def put_event(uid: str, body: EventIn, user: User = Depends(current_user), mailbox: Mailbox = Depends(current_mailbox)):
+    creds = _creds(mailbox)
     try:
-        return services.update_event(creds, uid, body, user_id=user.id)
+        return services.update_event(creds, uid, body, user_id=user.id, mailbox_id=mailbox.id)
     except (RuntimeError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -183,10 +307,10 @@ def put_event(uid: str, body: EventIn, user: User = Depends(current_user)):
 
 
 @app.post("/api/events/{uid}/cancel", response_model=CancelEventResponse)
-def cancel_event(uid: str, body: EventIn, user: User = Depends(current_user)):
-    creds = _creds(user)
+def cancel_event(uid: str, body: EventIn, user: User = Depends(current_user), mailbox: Mailbox = Depends(current_mailbox)):
+    creds = _creds(mailbox)
     try:
-        result = services.cancel_event(creds, uid, body, user_id=user.id)
+        result = services.cancel_event(creds, uid, body, user_id=user.id, mailbox_id=mailbox.id)
         return CancelEventResponse(uid=result.uid, sent_to=result.sent_to)
     except (RuntimeError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -199,6 +323,7 @@ def cancel_event_occurrence(
     uid: str,
     body: dict,
     user: User = Depends(current_user),
+    mailbox: Mailbox = Depends(current_mailbox),
 ):
     """Cancel a single occurrence of a recurring event (adds EXDATE on master,
     sends iTIP CANCEL with RECURRENCE-ID). Body: {"occurrence_start": ISO-8601}."""
@@ -214,7 +339,12 @@ def cancel_event_occurrence(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"invalid occurrence_start: {e}")
     try:
-        services.cancel_occurrence(user_id=user.id, event_uid=uid, occurrence_start=occ)
+        services.cancel_occurrence(
+            user_id=user.id,
+            mailbox_id=mailbox.id,
+            event_uid=uid,
+            occurrence_start=occ,
+        )
         return {"ok": True}
     except (RuntimeError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -223,8 +353,8 @@ def cancel_event_occurrence(
 
 
 @app.post("/api/rsvps/poll", response_model=RsvpPollOut)
-def post_rsvps(body: RsvpPollIn, user: User = Depends(current_user)):
-    creds = _creds(user)
+def post_rsvps(body: RsvpPollIn, mailbox: Mailbox = Depends(current_mailbox)):
+    creds = _creds(mailbox)
     try:
         return services.poll_rsvps(creds, body)
     except (RuntimeError, ValueError) as e:
@@ -236,14 +366,14 @@ def post_rsvps(body: RsvpPollIn, user: User = Depends(current_user)):
 @app.post("/api/invites/sync")
 def sync_invites_endpoint(
     body: dict | None = None,
-    user: User = Depends(current_user),
+    mailbox: Mailbox = Depends(current_mailbox),
 ):
     """Scan the inbox for incoming iTIP REQUEST / CANCEL .ics attachments
     and write them to the user's CalDAV calendar. Body (all optional):
     {"calendar": str, "mailbox": str = "INBOX", "only_unseen": bool = true,
      "mark_seen": bool = true}.
     """
-    creds = _creds(user)
+    creds = _creds(mailbox)
     body = body or {}
     raw_since = body.get("since_days", 30)
     try:
