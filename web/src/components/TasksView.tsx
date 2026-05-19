@@ -16,7 +16,7 @@ type Props = {
   tasks: TaskItem[];
   loading: boolean;
   onScan: (range: ScanRange) => void;
-  onBlockTime: (task: TaskItem) => void;
+  onPickTime: (task: TaskItem) => void;
   onDone: (task: TaskItem) => void;
   onSnooze: (task: TaskItem, days: 1 | 3 | 7) => void;
   onDismiss: (task: TaskItem) => void;
@@ -29,7 +29,7 @@ export function TasksView({
   tasks,
   loading,
   onScan,
-  onBlockTime,
+  onPickTime,
   onDone,
   onSnooze,
   onDismiss,
@@ -158,7 +158,7 @@ export function TasksView({
             <TaskRow
               key={t.id}
               task={t}
-              onBlockTime={onBlockTime}
+              onPickTime={onPickTime}
               onDone={onDone}
               onSnooze={onSnooze}
               onDismiss={onDismiss}

@@ -3,15 +3,15 @@ import type { TaskItem } from "../types";
 
 type Props = {
   task: TaskItem;
-  /** Drops a 30-min block onto the calendar at task.due_at or a sensible
-   * default. No attendees, no invite. */
-  onBlockTime: (task: TaskItem) => void;
+  /** Opens the event form pre-filled with the task's title and suggested
+   * start time. The user picks the slot and confirms. */
+  onPickTime: (task: TaskItem) => void;
   onDone: (task: TaskItem) => void;
   onSnooze: (task: TaskItem, days: 1 | 3 | 7) => void;
   onDismiss: (task: TaskItem) => void;
 };
 
-export function TaskRow({ task, onBlockTime, onDone, onSnooze, onDismiss }: Props) {
+export function TaskRow({ task, onPickTime, onDone, onSnooze, onDismiss }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -80,8 +80,8 @@ export function TaskRow({ task, onBlockTime, onDone, onSnooze, onDismiss }: Prop
           <button
             type="button"
             className="btn-primary text-xs"
-            onClick={() => onBlockTime(task)}
-            title="Drop a 30-min block on your calendar at the suggested time"
+            onClick={() => onPickTime(task)}
+            title="Open the event form pre-filled from this task"
           >
             Pick time
           </button>
