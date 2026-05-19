@@ -76,7 +76,23 @@ jobs:
           railway variables --service web \
             --set "COMMIT_SHA=$SHA" \
             --set "BUILD_TIME=$BUILT_AT"
-          railway up --service web --ci
+          # `railway up --ci` is known to flake on `backboard.railway.com`
+          # (reqwest TLS resets, GraphQL timeouts) even when the upload
+          # succeeded server-side. Retry up to 5 times with backoff so a
+          # single transient doesn't fail the whole deploy.
+          attempt=1
+          max_attempts=5
+          until railway up --service web --ci; do
+            status=$?
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "::error::railway up failed after $attempt attempts (last exit $status)"
+              exit "$status"
+            fi
+            sleep_for=$(( attempt * 10 ))
+            echo "::warning::railway up attempt $attempt failed (exit $status); retrying in ${sleep_for}s"
+            sleep "$sleep_for"
+            attempt=$(( attempt + 1 ))
+          done
 
       - name: Summary
         run: |
