@@ -37,8 +37,13 @@ class InviteResult:
 
 
 def _imap_connect(host: str, port: int, user: str, password: str) -> imaplib.IMAP4_SSL:
+    # 20-second socket timeout applies to connect AND every subsequent IMAP
+    # command. Without this, an unresponsive Purelymail connection would
+    # block the worker thread indefinitely and starve the event loop, which
+    # is what was hanging /api/admin/stats and other endpoints during a
+    # tick's auto-sync cycle.
     ctx = ssl.create_default_context()
-    m = imaplib.IMAP4_SSL(host, port, ssl_context=ctx)
+    m = imaplib.IMAP4_SSL(host, port, ssl_context=ctx, timeout=20)
     m.login(user, password)
     return m
 

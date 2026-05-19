@@ -36,8 +36,12 @@ class RsvpResult:
 
 
 def _imap_connect(host: str, port: int, user: str, password: str) -> imaplib.IMAP4_SSL:
+    # 20-second socket timeout applies to connect AND every IMAP command.
+    # Without this, an unresponsive Purelymail connection would block the
+    # worker thread indefinitely (same starvation bug that was hanging the
+    # auto-sync path).
     ctx = ssl.create_default_context()
-    m = imaplib.IMAP4_SSL(host, port, ssl_context=ctx)
+    m = imaplib.IMAP4_SSL(host, port, ssl_context=ctx, timeout=20)
     m.login(user, password)
     return m
 
