@@ -19,7 +19,7 @@ import email
 import imaplib
 import ssl
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Iterator, List, Optional
 
 from icalendar import Calendar as ICalendar
@@ -298,7 +298,10 @@ def list_recent_messages(
                     from email.utils import parsedate_to_datetime
                     parsed_date = parsedate_to_datetime(date_hdr)
                     if parsed_date is not None and parsed_date.tzinfo is not None:
-                        parsed_date = parsed_date.astimezone().replace(tzinfo=None)
+                        # Normalize to naive UTC so downstream callers can
+                        # compare against the last-scan checkpoint without
+                        # any timezone fragility.
+                        parsed_date = parsed_date.astimezone(timezone.utc).replace(tzinfo=None)
                 except Exception:
                     parsed_date = None
 

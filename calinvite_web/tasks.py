@@ -7,7 +7,7 @@ the user's device; the server only sees the extracted task fields.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -84,15 +84,21 @@ def get_recent_inbox(
     the lookback window.
     """
     effective_days = since_days
+    since_naive: Optional[datetime] = None
     if since_iso:
         try:
             since_dt = datetime.fromisoformat(since_iso.replace("Z", "+00:00"))
         except Exception:
             raise HTTPException(status_code=400, detail=f"invalid since_iso: {since_iso}")
+        # Normalize to naive UTC. last_scanned_at is stored as naive UTC,
+        # so this round-trips cleanly. We also need a naive UTC value to
+        # compare against InboxMessage.date below (also naive UTC).
+        if since_dt.tzinfo is not None:
+            since_naive = since_dt.astimezone(timezone.utc).replace(tzinfo=None)
+        else:
+            since_naive = since_dt
         # IMAP SINCE is day-resolution; compute days-back, floored to 1.
         now_utc = datetime.utcnow()
-        # Strip tz to compare against the naive utcnow value.
-        since_naive = since_dt.replace(tzinfo=None) if since_dt.tzinfo else since_dt
         delta = now_utc - since_naive
         effective_days = max(1, delta.days + 1)
     creds = services.creds_for(mailbox)
@@ -102,6 +108,14 @@ def get_recent_inbox(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"IMAP error: {e}")
+
+    # Precise post-IMAP filter: SINCE is day-resolution, so re-scanning a
+    # few hours after the previous run still returns every message from
+    # today. Drop anything received at or before the precise checkpoint
+    # so the model doesn't re-process emails we've already extracted.
+    if since_naive is not None:
+        msgs = [m for m in msgs if m.date is None or m.date > since_naive]
+
     return [
         InboxMessageOut(
             message_uid=m.message_uid,

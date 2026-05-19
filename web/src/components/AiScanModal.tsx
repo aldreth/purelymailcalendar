@@ -244,16 +244,24 @@ function PhaseView({ phase }: { phase: Phase }) {
           <Spinner />
         </div>
       );
-    case "done":
+    case "done": {
+      let line: string;
+      if (phase.emails === 0) {
+        line = "No new emails since the last scan. You're all caught up.";
+      } else if (phase.written === 0) {
+        line = `Read ${phase.emails} new email${phase.emails === 1 ? "" : "s"}, no action items found.`;
+      } else {
+        line = `Found ${phase.written} task${phase.written === 1 ? "" : "s"} across ${phase.emails} new email${
+          phase.emails === 1 ? "" : "s"
+        }.`;
+      }
       return (
         <div>
           <p className="text-sm font-medium text-emerald-700">Done.</p>
-          <p className="mt-1 text-sm text-ink-700">
-            Found {phase.written} task{phase.written === 1 ? "" : "s"} across {phase.emails} email
-            {phase.emails === 1 ? "" : "s"}.
-          </p>
+          <p className="mt-1 text-sm text-ink-700">{line}</p>
         </div>
       );
+    }
     case "error":
       return (
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
