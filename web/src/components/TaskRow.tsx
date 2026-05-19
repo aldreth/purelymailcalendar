@@ -3,13 +3,18 @@ import type { TaskItem } from "../types";
 
 type Props = {
   task: TaskItem;
+  /** One-click: drops a 30-min block onto the calendar at task.due_at or
+   * a sensible default. No attendees, no invite. */
+  onBlockTime: (task: TaskItem) => void;
+  /** Open the full event form pre-filled, for tasks where the user wants
+   * to pick time/attendees explicitly. */
   onCreateEvent: (task: TaskItem) => void;
   onDone: (task: TaskItem) => void;
   onSnooze: (task: TaskItem, days: 1 | 3 | 7) => void;
   onDismiss: (task: TaskItem) => void;
 };
 
-export function TaskRow({ task, onCreateEvent, onDone, onSnooze, onDismiss }: Props) {
+export function TaskRow({ task, onBlockTime, onCreateEvent, onDone, onSnooze, onDismiss }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -34,56 +39,77 @@ export function TaskRow({ task, onCreateEvent, onDone, onSnooze, onDismiss }: Pr
   const convertedTo = task.as_event_uid;
 
   return (
-    <div className="card flex items-start gap-3 px-4 py-3">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-base font-medium text-ink-900">{task.title}</span>
-          {convertedTo && (
-            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-              On calendar
+    <div className="card flex flex-col gap-2 px-3 py-3">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-medium text-ink-900">{task.title}</span>
+            {convertedTo && (
+              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                On calendar
+              </span>
+            )}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-ink-500">
+            {dueLabel && (
+              <span>
+                Due <span className="font-medium text-ink-700">{dueLabel}</span>
+              </span>
+            )}
+            {task.owner_email && (
+              <span>
+                Owner <span className="font-medium text-ink-700">{task.owner_email}</span>
+              </span>
+            )}
+            <span className="truncate">
+              From <span className="text-ink-700">{task.source_from || "(unknown)"}</span>
+              {task.source_subject ? ` / ${task.source_subject}` : ""}
             </span>
-          )}
+          </div>
         </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-500">
-          {dueLabel && (
-            <span>
-              Due <span className="font-medium text-ink-700">{dueLabel}</span>
-            </span>
-          )}
-          {task.owner_email && (
-            <span>
-              Owner <span className="font-medium text-ink-700">{task.owner_email}</span>
-            </span>
-          )}
-          <span className="truncate">
-            From <span className="text-ink-700">{task.source_from || "(unknown)"}</span>
-            {task.source_subject ? ` / ${task.source_subject}` : ""}
-          </span>
-        </div>
+        <button
+          type="button"
+          className="text-ink-400 hover:text-ink-700"
+          onClick={() => onDismiss(task)}
+          title="Not a task; remove"
+          aria-label="Dismiss"
+        >
+          ×
+        </button>
       </div>
-      <div ref={wrapRef} className="flex flex-shrink-0 items-center gap-1">
+
+      <div ref={wrapRef} className="flex flex-wrap items-center gap-2">
         {!convertedTo && (
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => onCreateEvent(task)}
-            title="Open the event form with this task pre-filled"
-          >
-            Create event
-          </button>
+          <>
+            <button
+              type="button"
+              className="btn-primary text-xs"
+              onClick={() => onBlockTime(task)}
+              title="One-click: drop a 30-min block on your calendar"
+            >
+              Block time on calendar
+            </button>
+            <button
+              type="button"
+              className="text-[11px] font-medium text-accent-700 underline-offset-2 hover:underline"
+              onClick={() => onCreateEvent(task)}
+              title="Open the event form with this task pre-filled"
+            >
+              Pick time...
+            </button>
+          </>
         )}
         <button
           type="button"
-          className="btn-secondary"
+          className="btn-secondary text-xs"
           onClick={() => onDone(task)}
-          title="Mark this task as done"
         >
           Done
         </button>
         <div className="relative">
           <button
             type="button"
-            className="btn-secondary"
+            className="btn-secondary text-xs"
             onClick={() => setMenuOpen((v) => !v)}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
@@ -93,7 +119,7 @@ export function TaskRow({ task, onCreateEvent, onDone, onSnooze, onDismiss }: Pr
           {menuOpen && (
             <div
               role="menu"
-              className="absolute right-0 z-30 mt-1 w-40 overflow-hidden rounded-md border border-ink-200 bg-white shadow-lg"
+              className="absolute right-0 z-30 mt-1 w-32 overflow-hidden rounded-md border border-ink-200 bg-white shadow-lg"
             >
               {[
                 { label: "1 day", days: 1 as const },
@@ -115,15 +141,6 @@ export function TaskRow({ task, onCreateEvent, onDone, onSnooze, onDismiss }: Pr
             </div>
           )}
         </div>
-        <button
-          type="button"
-          className="text-ink-400 hover:text-ink-700"
-          onClick={() => onDismiss(task)}
-          title="Not a task; remove"
-          aria-label="Dismiss"
-        >
-          ×
-        </button>
       </div>
     </div>
   );

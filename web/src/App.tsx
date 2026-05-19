@@ -14,13 +14,13 @@ import { UnofficialNote } from "./components/UnofficialNote";
 import { RunningSha } from "./components/RunningSha";
 import { ToastStack, type ToastMsg } from "./components/Toast";
 import { AddMailboxModal } from "./components/AddMailboxModal";
-import { TasksView } from "./components/TasksView";
+import { TasksSidebar } from "./components/TasksSidebar";
 import { AiScanModal } from "./components/AiScanModal";
 import { useAiAvailability } from "./aiTasks/useAiAvailability";
 import { addDays, buildMonthGrid, fmtTimeShort, startOfDay, startOfWeek } from "./util";
 import { useReminders } from "./useReminders";
 
-type Tab = "calendar" | "events" | "rsvps" | "tasks";
+type Tab = "calendar" | "events" | "rsvps";
 type FormState =
   | { open: false }
   | {
@@ -204,12 +204,12 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
   // its TabButton render only when the user has Chrome's Built-in AI
   // and is not on a touch-first device.
   const ai = useAiAvailability();
-  // If the user was on the Tasks tab and the AI status flips to
-  // unavailable (e.g. they switched browsers in the same session), drop
-  // them back to the calendar instead of stranding them on a hidden tab.
+  const [tasksOpen, setTasksOpen] = useState(false);
+  // If AI flips to unavailable in the same session (e.g. user switched
+  // browsers), close the sidebar so we don't leave a dead panel up.
   useEffect(() => {
-    if (tab === "tasks" && ai.ready && !ai.supported) setTab("calendar");
-  }, [tab, ai.ready, ai.supported]);
+    if (ai.ready && !ai.supported && tasksOpen) setTasksOpen(false);
+  }, [ai.ready, ai.supported, tasksOpen]);
 
   // Tasks state. Loaded the first time the user opens the Tasks tab and
   // again after a scan completes. Snoozed/done tasks are excluded by
@@ -306,12 +306,12 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
   }, [handle]);
 
   useEffect(() => {
-    if (tab !== "tasks") return;
+    if (!tasksOpen) return;
     if (!ai.supported) return;
     if (tasksLoadedRef.current) return;
     tasksLoadedRef.current = true;
     refreshTasks();
-  }, [tab, ai.supported, refreshTasks]);
+  }, [tasksOpen, ai.supported, refreshTasks]);
 
   const refreshEvents = useCallback(async () => {
     setEventsLoading(true);
@@ -731,6 +731,7 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
         onLogout={onSignOut}
         onSyncInvites={allActive ? undefined : onSyncInvites}
         syncingInvites={syncingInvites}
+        onOpenTasks={ai.ready && ai.supported ? () => setTasksOpen(true) : undefined}
       />
 
       <div className="mx-auto max-w-6xl px-4">
@@ -739,9 +740,6 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
           <TabButton active={tab === "calendar"} onClick={() => setTab("calendar")}>Calendar</TabButton>
           <TabButton active={tab === "events"} onClick={() => setTab("events")}>Events</TabButton>
           <TabButton active={tab === "rsvps"} onClick={() => setTab("rsvps")}>RSVPs</TabButton>
-          {ai.ready && ai.supported && (
-            <TabButton active={tab === "tasks"} onClick={() => setTab("tasks")}>Tasks</TabButton>
-          )}
         </nav>
 
         <main className="py-5">
@@ -778,52 +776,6 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
               calendar={calendar}
               onError={(m) => pushToast("error", m)}
               onSuccess={(m) => pushToast("success", m)}
-            />
-          )}
-          {tab === "tasks" && ai.supported && (
-            <TasksView
-              status={ai.status}
-              mailboxCount={mailboxes.length}
-              tasks={tasks}
-              loading={tasksLoading}
-              onScan={() => {
-                // "all" mode has no single source mailbox to scan; bounce
-                // the user to a specific account first.
-                if (allActive || typeof activeMailboxId !== "number") {
-                  pushToast("error", "Pick a single account from the switcher before scanning.");
-                  return;
-                }
-                setScanOpen(true);
-              }}
-              onCreateEvent={(t) => openEventFormForTask(t)}
-              onDone={async (t) => {
-                setTasks((prev) => prev.filter((x) => x.id !== t.id));
-                try {
-                  await handle(() => api.patchTask(t.id, { done: true }));
-                } catch (e: any) {
-                  pushToast("error", e?.message || "could not mark done");
-                  refreshTasks();
-                }
-              }}
-              onSnooze={async (t, days) => {
-                const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
-                setTasks((prev) => prev.filter((x) => x.id !== t.id));
-                try {
-                  await handle(() => api.patchTask(t.id, { snoozed_until: until }));
-                } catch (e: any) {
-                  pushToast("error", e?.message || "could not snooze");
-                  refreshTasks();
-                }
-              }}
-              onDismiss={async (t) => {
-                setTasks((prev) => prev.filter((x) => x.id !== t.id));
-                try {
-                  await handle(() => api.deleteTask(t.id));
-                } catch (e: any) {
-                  pushToast("error", e?.message || "could not dismiss");
-                  refreshTasks();
-                }
-              }}
             />
           )}
         </main>
@@ -893,6 +845,90 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
                 : `Scan finished. ${written} task${written === 1 ? "" : "s"} found.`,
             );
             refreshTasks();
+          }}
+        />
+      )}
+
+      {ai.ready && ai.supported && (
+        <TasksSidebar
+          open={tasksOpen}
+          status={ai.status}
+          mailboxCount={mailboxes.length}
+          tasks={tasks}
+          loading={tasksLoading}
+          onClose={() => setTasksOpen(false)}
+          onScan={() => {
+            if (typeof activeMailboxId !== "number") {
+              pushToast("error", "Pick a single account from the switcher before scanning.");
+              return;
+            }
+            setScanOpen(true);
+          }}
+          onBlockTime={async (t) => {
+            // One-click: drop a 30-minute block on the calendar at the
+            // task's due time (or tomorrow 9am if Nano didn't infer one).
+            // Routed to the task's source mailbox via per-call header
+            // override so it works even in "All accounts" mode.
+            let start = t.due_at ? new Date(t.due_at) : defaultTomorrowMorning();
+            if (isNaN(start.getTime())) start = defaultTomorrowMorning();
+            const tz =
+              Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago";
+            const payload: EventIn = {
+              summary: t.title,
+              start: toLocalIsoMinute(start),
+              duration_minutes: 30,
+              tz,
+              attendees: [],
+              dry_run: false,
+            };
+            try {
+              const r = await handle(() =>
+                api.createEvent(payload, { mailboxId: t.mailbox_id }),
+              );
+              if (!r) return;
+              await handle(() => api.patchTask(t.id, { as_event_uid: r.uid }));
+              setTasks((prev) => prev.filter((x) => x.id !== t.id));
+              const when = start.toLocaleString(undefined, {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              });
+              pushToast("success", `Blocked 30 min at ${when}.`);
+              refreshEvents();
+            } catch (e: any) {
+              pushToast("error", e?.message || "could not block time");
+            }
+          }}
+          onCreateEvent={(t) => openEventFormForTask(t)}
+          onDone={async (t) => {
+            setTasks((prev) => prev.filter((x) => x.id !== t.id));
+            try {
+              await handle(() => api.patchTask(t.id, { done: true }));
+            } catch (e: any) {
+              pushToast("error", e?.message || "could not mark done");
+              refreshTasks();
+            }
+          }}
+          onSnooze={async (t, days) => {
+            const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+            setTasks((prev) => prev.filter((x) => x.id !== t.id));
+            try {
+              await handle(() => api.patchTask(t.id, { snoozed_until: until }));
+            } catch (e: any) {
+              pushToast("error", e?.message || "could not snooze");
+              refreshTasks();
+            }
+          }}
+          onDismiss={async (t) => {
+            setTasks((prev) => prev.filter((x) => x.id !== t.id));
+            try {
+              await handle(() => api.deleteTask(t.id));
+            } catch (e: any) {
+              pushToast("error", e?.message || "could not dismiss");
+              refreshTasks();
+            }
           }}
         />
       )}
