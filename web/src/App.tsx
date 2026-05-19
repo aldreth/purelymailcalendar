@@ -798,14 +798,21 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
                 if (isNaN(start.getTime())) start = defaultTomorrowMorning();
                 const tz =
                   Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago";
-                // Send the event to the task's source mailbox AND to that
-                // mailbox's preferred calendar — otherwise the server falls
-                // back to the first calendar in the mailbox, which usually
-                // isn't the one the calendar dropdown is showing, and the
-                // block ends up invisible from the user's perspective.
                 const sourceMailbox = mailboxes.find((m) => m.id === t.mailbox_id);
-                const targetCalendar =
-                  sourceMailbox?.selected_calendar || calendar || undefined;
+                // Pick where the block lands:
+                // - If the task's source mailbox IS the one the user is
+                //   currently viewing, use the calendar dropdown they're
+                //   actively looking at. This avoids the case where the
+                //   stored `selected_calendar` is stale and the event
+                //   lands on a calendar that isn't being queried.
+                // - Otherwise fall back to the source mailbox's saved
+                //   preference, then to whatever's in the dropdown, then
+                //   let the server pick its default.
+                const sourceIsActive =
+                  sourceMailbox != null && activeMailboxId === sourceMailbox.id;
+                const targetCalendar = sourceIsActive
+                  ? calendar || sourceMailbox?.selected_calendar || undefined
+                  : sourceMailbox?.selected_calendar || calendar || undefined;
                 const payload: EventIn = {
                   summary: t.title,
                   start: toLocalIsoMinute(start),
@@ -821,10 +828,7 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
                   );
                   if (!r) return;
                   // Optimistic upsert + mark pending so the block survives
-                  // the first refresh while Purelymail's CalDAV catches up.
-                  // Without this the row flashes onto the calendar and then
-                  // disappears as soon as refreshEvents() returns a list
-                  // that doesn't yet contain it.
+                  // the first refetch while Purelymail's CalDAV catches up.
                   const optimistic: AppEvent = {
                     ...buildOptimisticEvent(payload, r.uid, me),
                     mailbox_id: sourceMailbox?.id,
@@ -837,6 +841,20 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
                   setEvents((prev) => upsertEvent(prev, optimistic));
                   await handle(() => api.patchTask(t.id, { as_event_uid: r.uid }));
                   setTasks((prev) => prev.filter((x) => x.id !== t.id));
+                  // If the block landed on a mailbox other than the active
+                  // one, switch the active mailbox to it. Otherwise a page
+                  // refresh re-binds the calendar view to the original
+                  // mailbox and the block looks like it vanished. The same
+                  // applies to the calendar choice within one mailbox.
+                  if (
+                    sourceMailbox &&
+                    activeMailboxId !== "all" &&
+                    activeMailboxId !== sourceMailbox.id
+                  ) {
+                    setActiveMailboxId(sourceMailbox.id);
+                  } else if (targetCalendar && targetCalendar !== calendar) {
+                    setCalendar(targetCalendar);
+                  }
                   const when = start.toLocaleString(undefined, {
                     weekday: "short",
                     month: "short",
@@ -844,7 +862,12 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
                     hour: "numeric",
                     minute: "2-digit",
                   });
-                  pushToast("success", `Blocked 30 min at ${when}.`);
+                  const where = sourceMailbox
+                    ? ` on ${sourceMailbox.display_name || sourceMailbox.email}${
+                        targetCalendar ? ` / ${targetCalendar}` : ""
+                      }`
+                    : "";
+                  pushToast("success", `Blocked 30 min at ${when}${where}.`);
                   refreshEvents();
                 } catch (e: any) {
                   pushToast("error", e?.message || "could not block time");
