@@ -26,6 +26,19 @@ export function AiScanModal({ activeMailboxId, onClose, onComplete }: Props) {
   const abortRef = useRef<AbortController | null>(null);
   const sessionRef = useRef<ChromeAiSession | null>(null);
 
+  // Stable refs for the callbacks so the scan effect can depend only on
+  // `activeMailboxId`. Without this, every parent re-render (toast push,
+  // task list update, etc.) recreates the inline onComplete arrow, the
+  // effect deps change, and the whole scan kicks off again — including a
+  // fresh /api/inbox/recent call and a new LanguageModel session. That
+  // shows up as runaway IMAP traffic and a stuck modal.
+  const onCompleteRef = useRef(onComplete);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+    onCloseRef.current = onClose;
+  }, [onComplete, onClose]);
+
   useEffect(() => {
     const controller = new AbortController();
     abortRef.current = controller;
@@ -56,6 +69,7 @@ export function AiScanModal({ activeMailboxId, onClose, onComplete }: Props) {
 
         if (emails.length === 0) {
           safeSet({ kind: "done", written: 0, emails: 0 });
+          onCompleteRef.current(0);
           return;
         }
 
@@ -74,7 +88,7 @@ export function AiScanModal({ activeMailboxId, onClose, onComplete }: Props) {
           written = res.written;
         }
         safeSet({ kind: "done", written, emails: emails.length });
-        onComplete(written);
+        onCompleteRef.current(written);
       } catch (err: unknown) {
         if (controller.signal.aborted) return;
         const message = err instanceof Error ? err.message : "scan failed";
@@ -97,7 +111,7 @@ export function AiScanModal({ activeMailboxId, onClose, onComplete }: Props) {
         // ignore
       }
     };
-  }, [activeMailboxId, onComplete]);
+  }, [activeMailboxId]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4">

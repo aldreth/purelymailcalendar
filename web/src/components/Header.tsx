@@ -17,9 +17,6 @@ type Props = {
   onLogout: () => void;
   onSyncInvites?: () => void;
   syncingInvites?: boolean;
-  /** When set, render the Tasks button. The caller controls visibility
-   * via the Chrome-AI feature check; the header itself stays agnostic. */
-  onOpenTasks?: () => void;
 };
 
 export function Header({
@@ -37,7 +34,6 @@ export function Header({
   onLogout,
   onSyncInvites,
   syncingInvites,
-  onOpenTasks,
 }: Props) {
   const allActive = activeMailboxId === "all";
   const [menuOpen, setMenuOpen] = useState(false);
@@ -128,26 +124,6 @@ export function Header({
               title="Inbox invites auto-sync every 5 minutes. Click to sync now."
             >
               {syncingInvites ? "Syncing..." : "Sync invites"}
-            </button>
-          )}
-          {onOpenTasks && (
-            <button
-              onClick={onOpenTasks}
-              className="btn-secondary inline-flex items-center gap-1.5"
-              title="AI-extracted tasks from your inbox"
-              aria-label="Open inbox tasks panel"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden>
-                <path
-                  d="M3 4h10M3 8h7M3 12h10"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                />
-                <circle cx="13" cy="8" r="1.4" fill="currentColor" />
-              </svg>
-              Tasks
             </button>
           )}
           <button onClick={onNew} className="btn-primary">+ New event</button>
