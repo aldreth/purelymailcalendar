@@ -17,6 +17,7 @@ type Props = {
   onLogout: () => void;
   onSyncInvites?: () => void;
   syncingInvites?: boolean;
+  onShowContacts?: () => void;
 };
 
 export function Header({
@@ -34,6 +35,7 @@ export function Header({
   onLogout,
   onSyncInvites,
   syncingInvites,
+  onShowContacts,
 }: Props) {
   const allActive = activeMailboxId === "all";
   const [menuOpen, setMenuOpen] = useState(false);
@@ -145,6 +147,17 @@ export function Header({
                   Webmail
                   <span className="ml-1 text-xs text-ink-400" aria-hidden>↗</span>
                 </a>
+                {onShowContacts && (
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onShowContacts();
+                    }}
+                    className="block w-full border-b border-ink-100 px-3 py-2 text-left text-sm text-ink-700 hover:bg-ink-50"
+                  >
+                    Contacts
+                  </button>
+                )}
                 <button
                   onClick={onLogout}
                   className="block w-full px-3 py-2 text-left text-sm text-ink-700 hover:bg-ink-50"

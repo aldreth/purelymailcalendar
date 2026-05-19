@@ -14,6 +14,7 @@ import { UnofficialNote } from "./components/UnofficialNote";
 import { RunningSha } from "./components/RunningSha";
 import { ToastStack, type ToastMsg } from "./components/Toast";
 import { AddMailboxModal } from "./components/AddMailboxModal";
+import { ContactsPanel } from "./components/ContactsPanel";
 import { TasksView, type ScanRange } from "./components/TasksView";
 import { AiScanModal } from "./components/AiScanModal";
 import { useAiAvailability } from "./aiTasks/useAiAvailability";
@@ -146,6 +147,7 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
   }, []);
   const allActive = activeMailboxId === "all";
   const [showAddMailbox, setShowAddMailbox] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
 
   const [calendars, setCalendars] = useState<CalendarSummary[]>([]);
   const [calendar, setCalendarState] = useState<string>(
@@ -775,6 +777,7 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
         onLogout={onSignOut}
         onSyncInvites={allActive ? undefined : onSyncInvites}
         syncingInvites={syncingInvites}
+        onShowContacts={allActive ? undefined : () => setShowContacts(true)}
       />
 
       <div className="mx-auto max-w-6xl px-4">
@@ -926,6 +929,17 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
             setEvents([]);
             pushToast("success", `Connected ${mb.email}.`);
           }}
+        />
+      )}
+
+      {showContacts && (
+        <ContactsPanel
+          onClose={() => setShowContacts(false)}
+          activeMailbox={
+            typeof activeMailboxId === "number"
+              ? mailboxes.find((m) => m.id === activeMailboxId) || null
+              : null
+          }
         />
       )}
 
