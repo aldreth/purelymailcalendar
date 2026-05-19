@@ -38,16 +38,23 @@ export function AiScanModal({
   const abortRef = useRef<AbortController | null>(null);
   const sessionRef = useRef<ChromeAiSession | null>(null);
 
-  // Stable refs for the callbacks so the scan effect can depend only on
-  // `activeMailboxId`. Without this, every parent re-render (toast push,
-  // task list update, etc.) recreates the inline onComplete arrow, the
-  // effect deps change, and the whole scan kicks off again.
+  // Stable refs for callbacks AND scan-window inputs so the scan effect
+  // can depend only on `activeMailboxId`. Without this:
+  //   - inline onComplete arrows recreate on every parent render → effect
+  //     re-fires → new LanguageModel session → /api/inbox/recent again.
+  //   - markScanComplete updates last_scanned_at after a scan, which
+  //     bumps the `sinceIso` prop, which would otherwise trigger another
+  //     scan, an infinite loop of "no new tasks" pop-ups.
   const onCompleteRef = useRef(onComplete);
   const onCloseRef = useRef(onClose);
+  const sinceIsoRef = useRef(sinceIso);
+  const sinceDaysRef = useRef(sinceDays);
   useEffect(() => {
     onCompleteRef.current = onComplete;
     onCloseRef.current = onClose;
-  }, [onComplete, onClose]);
+    sinceIsoRef.current = sinceIso;
+    sinceDaysRef.current = sinceDays;
+  }, [onComplete, onClose, sinceIso, sinceDays]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -77,7 +84,9 @@ export function AiScanModal({
 
         safeSet({ kind: "fetching" });
         const emails = await api.inboxRecent(
-          sinceIso ? { since_iso: sinceIso } : { since_days: sinceDays },
+          sinceIsoRef.current
+            ? { since_iso: sinceIsoRef.current }
+            : { since_days: sinceDaysRef.current },
         );
         if (controller.signal.aborted) return;
 
@@ -125,7 +134,7 @@ export function AiScanModal({
         // ignore
       }
     };
-  }, [activeMailboxId, sinceIso, sinceDays]);
+  }, [activeMailboxId]);
 
   const showBreathing =
     phase.kind === "fetching" ||
@@ -192,24 +201,19 @@ export function AiScanModal({
 function PhaseView({ phase }: { phase: Phase }) {
   switch (phase.kind) {
     case "checking":
-      return (
-        <div>
-          <p className="text-sm font-medium text-ink-800">Checking model...</p>
-          <p className="mt-1 text-xs text-ink-500">
-            Confirming the on-device AI is ready.
-          </p>
-          <Spinner />
-        </div>
-      );
     case "downloading": {
-      const pct = phase.total > 0 ? Math.round((phase.loaded / phase.total) * 100) : 0;
+      // Both states present the same friendly copy; the only visible
+      // difference is a progress bar when a real download is happening.
+      const isActiveDownload = phase.kind === "downloading" && phase.total > 0;
+      const pct = isActiveDownload && phase.kind === "downloading"
+        ? Math.round((phase.loaded / phase.total) * 100)
+        : 0;
       return (
         <div>
-          <p className="text-sm font-medium text-ink-800">Downloading on-device model</p>
-          <p className="mt-1 text-xs text-ink-500">
-            One-time download (around 3 GB). Future scans skip this step.
+          <p className="text-sm font-medium text-ink-800">
+            Checking health of the Intelligence Model on Chrome...
           </p>
-          <ProgressBar pct={pct} />
+          {isActiveDownload ? <ProgressBar pct={pct} /> : <Spinner />}
         </div>
       );
     }
