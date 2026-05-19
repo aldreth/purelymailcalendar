@@ -463,16 +463,12 @@ if _about_path is not None:
         return FileResponse(path)
 
 
-# Static content pages (wiki + blog). Same dev-vs-prod resolution trick as
-# /about above: in prod they live under web/dist/ after `npm run build`;
-# in dev we read straight from web/public/. Each tuple is (route, dist
-# location, public-source location).
+# Static content pages. Same dev-vs-prod resolution trick as /about above:
+# in prod they live under web/dist/ after `npm run build`; in dev we read
+# straight from web/public/. The reference page for on-device AI lives on
+# the GitHub wiki rather than here; the blog post stays in-app because it
+# carries the brand voice.
 _content_pages = [
-    (
-        "/wiki/on-device-ai",
-        Path(__file__).resolve().parent.parent / "web" / "dist" / "wiki" / "on-device-ai.html",
-        Path(__file__).resolve().parent.parent / "web" / "public" / "wiki" / "on-device-ai.html",
-    ),
     (
         "/blog/private-by-design-ai",
         Path(__file__).resolve().parent.parent / "web" / "dist" / "blog" / "private-by-design-ai.html",
@@ -495,6 +491,23 @@ for _route, _dist, _public in _content_pages:
         handler = _make_content_route(_dist, _public)
         app.get(_route)(handler)
         app.get(_route + "/")(handler)
+
+
+# The on-device-AI reference page used to live at /wiki/on-device-ai before
+# it moved to the GitHub Wiki. Redirect cached or shared links there so they
+# land on the canonical page instead of falling through to the SPA shell.
+from fastapi.responses import RedirectResponse  # noqa: E402
+
+_WIKI_ON_DEVICE_AI = (
+    "https://github.com/bhartiyashesh/purelymailcalendar/wiki/"
+    "On%E2%80%90device-AI-in-Purelymail-Calendar"
+)
+
+
+@app.get("/wiki/on-device-ai")
+@app.get("/wiki/on-device-ai/")
+def _redirect_wiki_on_device_ai():
+    return RedirectResponse(_WIKI_ON_DEVICE_AI, status_code=301)
 
 
 if _static_dir.is_dir():
