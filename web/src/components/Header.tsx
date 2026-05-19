@@ -68,14 +68,6 @@ export function Header({
         </span>
         <div className="flex-1" />
         <div className="flex items-center gap-3">
-          <a
-            href="https://inbox.purelymail.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hidden font-serif text-xs uppercase tracking-[0.2em] text-accent-900/70 hover:text-accent-900 sm:inline-block"
-          >
-            Webmail
-          </a>
           {mailboxes.length > 0 && (
             <div className="hidden sm:block">
               <MailboxSwitcher
@@ -141,6 +133,16 @@ export function Header({
                   <div className="truncate text-sm font-medium text-ink-800">{me.display_name || me.email}</div>
                   {me.display_name && <div className="truncate text-xs text-ink-500">{me.email}</div>}
                 </div>
+                <a
+                  href="https://inbox.purelymail.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMenuOpen(false)}
+                  className="block border-b border-ink-100 px-3 py-2 text-sm text-ink-700 hover:bg-ink-50"
+                >
+                  Webmail
+                  <span className="ml-1 text-xs text-ink-400" aria-hidden>↗</span>
+                </a>
                 <button
                   onClick={onLogout}
                   className="block w-full px-3 py-2 text-left text-sm text-ink-700 hover:bg-ink-50"
