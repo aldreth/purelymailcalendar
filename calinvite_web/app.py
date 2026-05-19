@@ -75,6 +75,7 @@ def _startup() -> None:
         ("mailboxes", "selected_calendar", "VARCHAR(255)"),
         ("mailboxes", "color", "VARCHAR(16)"),
         ("mailboxes", "last_scanned_at", "TIMESTAMP"),
+        ("mailboxes", "last_contacts_synced_at", "TIMESTAMP"),
     ]
 
     def _table_columns(table: str) -> set[str]:
@@ -107,6 +108,10 @@ def _startup() -> None:
                 "CREATE INDEX IF NOT EXISTS ix_task_items_user_id ON task_items (user_id)",
                 "CREATE INDEX IF NOT EXISTS ix_task_items_mailbox_id ON task_items (mailbox_id)",
                 "CREATE INDEX IF NOT EXISTS ix_task_items_done_at ON task_items (done_at)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS ux_contacts_mailbox_uid ON contacts (mailbox_id, vcard_uid)",
+                "CREATE INDEX IF NOT EXISTS ix_contacts_user_email ON contacts (user_id, primary_email)",
+                "CREATE INDEX IF NOT EXISTS ix_contacts_mailbox_id ON contacts (mailbox_id)",
+                "CREATE INDEX IF NOT EXISTS ix_contacts_user_id ON contacts (user_id)",
             ]
             for s in pg_stmts:
                 try:
@@ -122,6 +127,8 @@ from .admin import router as admin_router  # noqa: E402  (intentional late impor
 app.include_router(admin_router)
 from .tasks import router as tasks_router  # noqa: E402  (intentional late import)
 app.include_router(tasks_router)
+from .contacts import router as contacts_router  # noqa: E402  (intentional late import)
+app.include_router(contacts_router)
 
 
 def _creds(mb: Mailbox) -> services.MailboxCreds:

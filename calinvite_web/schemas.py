@@ -242,3 +242,45 @@ class TaskItemPatchIn(BaseModel):
 class TaskBulkUpsertOut(BaseModel):
     written: int
     items: List[TaskItemOut]
+
+
+# ---------------------------------------------------------------------------
+# Contacts (feat/contacts)
+# ---------------------------------------------------------------------------
+
+
+class ContactOut(BaseModel):
+    id: int
+    mailbox_id: int
+    vcard_uid: str
+    full_name: str
+    primary_email: Optional[str] = None
+    emails: List[str] = []
+    org: Optional[str] = None
+    source_book: str
+    last_synced_at: datetime
+
+
+class ContactSyncOut(BaseModel):
+    """Counts returned by POST /api/contacts/sync."""
+    upserted: int
+    deleted: int
+    books: List[str] = []
+    last_synced_at: datetime
+    throttled: bool = False  # true when the call short-circuited because the cache was fresh
+
+
+class ContactAttendeeIn(BaseModel):
+    """One attendee being auto-added by /api/contacts/from-event."""
+    email: EmailStr
+    name: Optional[str] = None
+
+
+class ContactFromEventIn(BaseModel):
+    attendees: List[ContactAttendeeIn]
+
+
+class ContactFromEventOut(BaseModel):
+    added: int
+    skipped: int
+    errors: int

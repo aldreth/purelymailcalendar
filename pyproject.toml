@@ -12,6 +12,7 @@ dependencies = [
     "icalendar>=5.0.11",
     "python-dotenv>=1.0.1",
     "sievelib>=1.4.0",
+    "vobject>=0.9.7",
 ]
 
 [project.optional-dependencies]

@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -71,6 +71,10 @@ class Mailbox(Base):
     # the "since last scan" incremental fetch so we don't reprocess the
     # same emails on every Fetch click.
     last_scanned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(), nullable=True)
+    # Last time we walked CardDAV and synced this mailbox's contact cache.
+    # Used by the autocomplete debouncer to decide whether the cache is
+    # fresh enough to skip a refetch (5-min TTL).
+    last_contacts_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(), default=_utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(), default=_utcnow, onupdate=_utcnow, nullable=False)
 
@@ -188,3 +192,37 @@ class TaskItem(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime(), default=_utcnow, nullable=False)
     extracted_at: Mapped[datetime] = mapped_column(DateTime(), default=_utcnow, nullable=False)
+
+
+class Contact(Base):
+    """A vCard cached from the user's Purelymail CardDAV address book.
+
+    Source of truth is CardDAV (Purelymail's /webdav/{account}/carddav/);
+    this table is a read-through cache so the attendee autocomplete can
+    answer in sub-100ms without walking PROPFIND on every keystroke.
+    `source_book` records which address book on the server the row came
+    from ('default' or 'automaticallyCollected'). `etag` is the server-
+    side validator for incremental sync; when CardDAV doesn't expose one
+    we fall back to a hash of the vCard bytes.
+    """
+    __tablename__ = "contacts"
+    __table_args__ = (
+        UniqueConstraint("mailbox_id", "vcard_uid", name="ux_contacts_mailbox_uid"),
+        Index("ix_contacts_user_email", "user_id", "primary_email"),
+        Index("ix_contacts_mailbox_id", "mailbox_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    mailbox_id: Mapped[int] = mapped_column(ForeignKey("mailboxes.id", ondelete="CASCADE"), nullable=False)
+    vcard_uid: Mapped[str] = mapped_column(String(255), nullable=False)
+    etag: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    href: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    primary_email: Mapped[Optional[str]] = mapped_column(String(254), nullable=True)
+    emails_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    org: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    source_book: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    raw_vcard: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_synced_at: Mapped[datetime] = mapped_column(DateTime(), default=_utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(), default=_utcnow, nullable=False)
