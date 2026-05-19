@@ -292,8 +292,10 @@
         You can confirm the model is local by opening DevTools, switching to the
         Network tab, and watching what happens while the Tasks scan runs. The only
         requests you'll see are to this app's own backend (for the email list) and
-        to nothing else. No <code>generativelanguage.googleapis.com</code>, no
-        <code>api.openai.com</code>, no <code>api.anthropic.com</code>.
+        to nothing else. The browser is not reaching out to
+        <code>generativelanguage.googleapis.com</code>,
+        <code>api.openai.com</code>, <code>api.anthropic.com</code>, or any
+        other model host.
       </p>
 
       <h2 id="data-path">The data path, step by step</h2>
@@ -346,7 +348,7 @@
 
       <h2 id="what-doesnt">What does not</h2>
       <ul>
-        <li>The email body. Never written to our database. Never sent to a model.</li>
+        <li>The email body. It stays out of our database and out of any model's input pipe.</li>
         <li>The model prompt. It's constructed and consumed in the same browser tab.</li>
         <li>The model output before parsing. The browser parses the JSON and discards the raw string.</li>
         <li>Anything from a non-matching email. If Nano returns <code>has_tasks=false</code>, the row is dropped on the spot.</li>
