@@ -50,37 +50,69 @@ app.add_middleware(
 @app.on_event("startup")
 def _startup() -> None:
     Base.metadata.create_all(bind=engine)
-    # Idempotent column additions for ScheduledReminder. Postgres-flavored
-    # SQL; on SQLite (dev) we skip silently because IF NOT EXISTS isn't
-    # supported and the dev DB is normally fresh.
-    from sqlalchemy import text
+
+    # Idempotent migrations for tables that already exist. SQLAlchemy's
+    # create_all only creates missing tables; it never alters existing
+    # ones, so columns added in later commits have to be ALTERed in.
+    #
+    # We use the SQLAlchemy inspector to read each table's current
+    # columns and only run ADD COLUMN when the column is missing. That
+    # works on both Postgres (live deployments) and SQLite (local dev
+    # DBs that pre-date a model change), so the dev DB no longer has to
+    # be wiped every time we add a column.
+    from sqlalchemy import inspect, text
 
     dialect = engine.dialect.name
-    if dialect != "postgresql":
-        return
-    stmts = [
-        "ALTER TABLE scheduled_reminders ADD COLUMN IF NOT EXISTS occurrence_start TIMESTAMP",
-        "ALTER TABLE scheduled_reminders ADD COLUMN IF NOT EXISTS confirm_token VARCHAR(64)",
-        "ALTER TABLE scheduled_reminders ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMP",
-        "ALTER TABLE scheduled_reminders ADD COLUMN IF NOT EXISTS declined_at TIMESTAMP",
-        "CREATE UNIQUE INDEX IF NOT EXISTS ix_scheduled_reminders_confirm_token ON scheduled_reminders (confirm_token)",
-        # Multi-mailbox: drop the old user-uniqueness on mailboxes, add the
-        # selected_calendar column, and tag reminders with their owning
-        # mailbox. All best-effort and idempotent.
-        "ALTER TABLE mailboxes DROP CONSTRAINT IF EXISTS mailboxes_user_id_key",
-        "ALTER TABLE mailboxes ADD COLUMN IF NOT EXISTS selected_calendar VARCHAR(255)",
-        "CREATE INDEX IF NOT EXISTS ix_mailboxes_user_id ON mailboxes (user_id)",
-        "ALTER TABLE scheduled_reminders ADD COLUMN IF NOT EXISTS mailbox_id INTEGER REFERENCES mailboxes(id) ON DELETE CASCADE",
-        "CREATE INDEX IF NOT EXISTS ix_scheduled_reminders_mailbox_id ON scheduled_reminders (mailbox_id)",
-        # All-accounts overlay (phase 2a): user-pickable hex color per mailbox.
-        "ALTER TABLE mailboxes ADD COLUMN IF NOT EXISTS color VARCHAR(16)",
+    inspector = inspect(engine)
+
+    # (table, column_name, column_type_for_alter)
+    column_additions = [
+        ("scheduled_reminders", "occurrence_start", "TIMESTAMP"),
+        ("scheduled_reminders", "confirm_token", "VARCHAR(64)"),
+        ("scheduled_reminders", "confirmed_at", "TIMESTAMP"),
+        ("scheduled_reminders", "declined_at", "TIMESTAMP"),
+        ("scheduled_reminders", "mailbox_id", "INTEGER"),
+        ("mailboxes", "selected_calendar", "VARCHAR(255)"),
+        ("mailboxes", "color", "VARCHAR(16)"),
+        ("mailboxes", "last_scanned_at", "TIMESTAMP"),
     ]
+
+    def _table_columns(table: str) -> set[str]:
+        try:
+            return {c["name"] for c in inspector.get_columns(table)}
+        except Exception:
+            return set()
+
     with engine.begin() as conn:
-        for s in stmts:
+        for table, column, coltype in column_additions:
+            cols = _table_columns(table)
+            if not cols:
+                continue  # table doesn't exist yet (handled by create_all on first run)
+            if column in cols:
+                continue
             try:
-                conn.execute(text(s))
-            except Exception as e:  # pragma: no cover - best-effort migration
-                print(f"[startup] migration step skipped: {s} -> {e}")
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}"))
+            except Exception as e:  # pragma: no cover - best-effort
+                print(f"[startup] could not add {table}.{column}: {e}", flush=True)
+
+        # Postgres-only constraint/index ops. SQLite either created these
+        # via create_all already, or doesn't support the syntax.
+        if dialect == "postgresql":
+            pg_stmts = [
+                "ALTER TABLE mailboxes DROP CONSTRAINT IF EXISTS mailboxes_user_id_key",
+                "CREATE INDEX IF NOT EXISTS ix_mailboxes_user_id ON mailboxes (user_id)",
+                "CREATE INDEX IF NOT EXISTS ix_scheduled_reminders_mailbox_id ON scheduled_reminders (mailbox_id)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_scheduled_reminders_confirm_token ON scheduled_reminders (confirm_token)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS ux_task_items_source ON task_items (user_id, mailbox_id, message_uid, task_index)",
+                "CREATE INDEX IF NOT EXISTS ix_task_items_user_id ON task_items (user_id)",
+                "CREATE INDEX IF NOT EXISTS ix_task_items_mailbox_id ON task_items (mailbox_id)",
+                "CREATE INDEX IF NOT EXISTS ix_task_items_done_at ON task_items (done_at)",
+            ]
+            for s in pg_stmts:
+                try:
+                    conn.execute(text(s))
+                except Exception as e:  # pragma: no cover
+                    print(f"[startup] migration step skipped: {s} -> {e}", flush=True)
 
 
 app.include_router(auth_router)
@@ -88,6 +120,8 @@ app.include_router(mailbox_router)
 app.include_router(reminders_router)
 from .admin import router as admin_router  # noqa: E402  (intentional late import)
 app.include_router(admin_router)
+from .tasks import router as tasks_router  # noqa: E402  (intentional late import)
+app.include_router(tasks_router)
 
 
 def _creds(mb: Mailbox) -> services.MailboxCreds:
@@ -396,19 +430,37 @@ def sync_invites_endpoint(
 
 
 _static_dir = Path(__file__).resolve().parent.parent / "web" / "dist"
+# In dev we don't have a `dist/` build but the source still has the
+# about page at `web/public/about.html`. Mount a dedicated /about route
+# that reads from whichever location is present, so navigating to
+# /about works both in dev (Vite proxies to us) and in prod.
+_about_candidates = [
+    Path(__file__).resolve().parent.parent / "web" / "dist" / "about.html",
+    Path(__file__).resolve().parent.parent / "web" / "public" / "about.html",
+]
+
+
+def _find_about() -> Optional[Path]:
+    for p in _about_candidates:
+        if p.is_file():
+            return p
+    return None
+
+
+_about_path = _find_about()
+if _about_path is not None:
+    @app.get("/about")
+    @app.get("/about/")
+    def about_page_dev():
+        path = _find_about() or _about_path
+        return FileResponse(path)
+
+
 if _static_dir.is_dir():
     app.mount("/assets", StaticFiles(directory=_static_dir / "assets"), name="assets")
 
     @app.get("/")
     def index():
-        return FileResponse(_static_dir / "index.html")
-
-    @app.get("/about")
-    @app.get("/about/")
-    def about_page():
-        about_html = _static_dir / "about.html"
-        if about_html.is_file():
-            return FileResponse(about_html)
         return FileResponse(_static_dir / "index.html")
 
     @app.get("/{full_path:path}")

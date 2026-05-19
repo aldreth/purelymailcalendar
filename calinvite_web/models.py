@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -67,6 +67,10 @@ class Mailbox(Base):
     # view. Nullable so the UI can fall back to a palette index derived from
     # `id` when the user hasn't picked one.
     color: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # Last time we ran an AI-tasks inbox scan against this mailbox. Drives
+    # the "since last scan" incremental fetch so we don't reprocess the
+    # same emails on every Fetch click.
+    last_scanned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(), default=_utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(), default=_utcnow, onupdate=_utcnow, nullable=False)
 
@@ -140,3 +144,47 @@ class UserSession(Base):
     revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     user: Mapped[User] = relationship("User", back_populates="sessions")
+
+
+class TaskItem(Base):
+    """An action item extracted from an inbox email by a browser-side LLM.
+
+    The browser pulls recent emails via /api/inbox/recent, runs Gemini Nano
+    locally to extract tasks, and POSTs the structured results back to
+    /api/tasks/bulk. Email bodies never round-trip through the server.
+
+    The unique key on (user_id, mailbox_id, message_uid, task_index) makes
+    re-scanning idempotent: a second extraction of the same email overwrites
+    the row in place, while user-managed state (done_at, snoozed_until,
+    as_event_uid) lives only here and is carried forward by the upsert path.
+    """
+    __tablename__ = "task_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "mailbox_id", "message_uid", "task_index",
+            name="ux_task_items_source",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    mailbox_id: Mapped[int] = mapped_column(ForeignKey("mailboxes.id", ondelete="CASCADE"), index=True, nullable=False)
+    message_uid: Mapped[str] = mapped_column(String(255), nullable=False)
+    task_index: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    due_at: Mapped[Optional[datetime]] = mapped_column(DateTime(), nullable=True)
+    owner_email: Mapped[Optional[str]] = mapped_column(String(254), nullable=True)
+
+    source_subject: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    source_from: Mapped[str] = mapped_column(String(254), nullable=False, default="")
+    source_date: Mapped[Optional[datetime]] = mapped_column(DateTime(), nullable=True)
+
+    done_at: Mapped[Optional[datetime]] = mapped_column(DateTime(), nullable=True)
+    snoozed_until: Mapped[Optional[datetime]] = mapped_column(DateTime(), nullable=True)
+    # When the user converts a task into a calendar event, we stamp the
+    # resulting event UID here so the row stops nagging.
+    as_event_uid: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(), default=_utcnow, nullable=False)
+    extracted_at: Mapped[datetime] = mapped_column(DateTime(), default=_utcnow, nullable=False)

@@ -67,7 +67,7 @@ export function MailboxSwitcher({ mailboxes, activeId, onSwitch, onAddAccount, o
                     if (!allActive) onSwitch("all");
                   }}
                   className={`flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-ink-50 ${
-                    allActive ? "bg-accent-50" : ""
+                    allActive ? "bg-accent-100" : ""
                   }`}
                 >
                   <span
@@ -120,7 +120,7 @@ export function MailboxSwitcher({ mailboxes, activeId, onSwitch, onAddAccount, o
                       if (!isActive) onSwitch(mb.id);
                     }}
                     className={`flex w-full items-start gap-2 px-1 py-2 pr-3 text-left hover:bg-ink-50 ${
-                      isActive ? "bg-accent-50" : ""
+                      isActive ? "bg-accent-100" : ""
                     }`}
                   >
                     <span

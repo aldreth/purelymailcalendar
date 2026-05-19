@@ -1,7 +1,5 @@
 import { useState } from "react";
 import { api } from "../api";
-import { TrustLine } from "./TrustLine";
-import { UnofficialNote } from "./UnofficialNote";
 
 const STORED_EMAIL_KEY = "pmc.lastSignInEmail";
 
@@ -45,166 +43,227 @@ export function LoginView() {
   }
 
   return (
-    <div className="grid min-h-full grid-cols-1 bg-accent-50 lg:grid-cols-2">
-      {/* Left rail: hero image. Hidden on small screens so the form gets
-          the whole viewport on mobile. */}
-      <aside className="relative hidden overflow-hidden lg:block">
-        <img
-          src="/signin-hero.jpg"
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-        {/* Subtle coral wash + bottom gradient so the wordmark stays readable
-            no matter how the photo crops. */}
-        <div className="absolute inset-0 bg-accent-900/10" aria-hidden="true" />
-        <div
-          className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-accent-900/60 to-transparent"
-          aria-hidden="true"
-        />
-        <div className="relative flex h-full flex-col justify-between p-10">
-          <a href="/" className="flex items-start gap-3">
-            <img src="/logo.png" alt="" className="mt-0.5 h-9 w-9" />
-            <span className="flex flex-col leading-tight">
-              <span className="font-serif text-xl text-white drop-shadow-sm">
-                Purelymail Calendar
-              </span>
-              <span className="mt-0.5 text-[11px] uppercase tracking-[0.18em] text-white/85 drop-shadow-sm">
-                <span className="font-semibold">Unofficial</span>
-                <span className="opacity-70"> &middot; not associated with Purelymail</span>
-              </span>
-            </span>
-          </a>
-          <div className="max-w-md text-white">
-            <p className="font-serif text-[11px] uppercase tracking-[0.25em] text-white/80">
-              Volume i &middot; Sign in
-            </p>
-            <p className="mt-3 font-serif text-3xl italic leading-tight drop-shadow">
-              A calendar for the <span className="not-italic">Purelymail</span> mailbox.
-            </p>
-            <p className="mt-3 max-w-sm text-sm text-white/85">
-              Send real meeting invites, track RSVPs, sync inbound invitations.
-              Events live on Purelymail's CalDAV, where they already were.
-            </p>
-          </div>
-        </div>
-      </aside>
-
-      {/* Right rail: the actual sign-in form. */}
-      <main className="flex flex-col">
-        <header className="border-b border-accent-900/20 lg:border-none">
-          <div className="flex items-center justify-between px-6 py-4">
-            <a href="/" className="flex items-center gap-3 lg:invisible">
-              <img src="/logo.png" alt="" className="h-8 w-8" />
-              <span className="font-serif text-lg text-accent-900">
-                Purelymail Calendar
+    <div className="flex min-h-full items-center justify-center bg-accent-50 px-4 py-10">
+      <div className="w-full max-w-5xl overflow-hidden rounded-3xl border border-ink-200/60 bg-ink-900 shadow-2xl">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.05fr_1fr]">
+          {/* Left: the dark sign-in panel. */}
+          <section className="flex flex-col justify-between px-8 py-10 text-ink-50 sm:px-12 sm:py-14">
+            <a href="/" className="flex items-start gap-3">
+              <img src="/logo.png" alt="" className="h-9 w-9 rounded-lg" />
+              <span className="flex flex-col leading-tight">
+                <span className="text-base font-semibold tracking-tight text-white">
+                  Purelymail Calendar
+                </span>
+                <span className="mt-0.5 text-[10px] uppercase tracking-[0.18em] text-white/80">
+                  Unofficial &middot; not affiliated with Purelymail
+                </span>
               </span>
             </a>
-            <a
-              href="/about"
-              className="font-serif text-xs uppercase tracking-[0.2em] text-accent-900/70 hover:text-accent-900"
-            >
-              About
-            </a>
-          </div>
-        </header>
 
-        <div className="flex flex-1 items-center justify-center px-6 py-12">
-          <div className="w-full max-w-sm">
-          {sent ? (
-            <section className="text-center">
-              <h1 className="font-serif text-3xl text-accent-900">Check your email.</h1>
-              <p className="mt-3 text-sm text-ink-700">
-                A sign-in link is on its way to{" "}
-                <span className="font-medium text-accent-900">{email}</span>. It expires in 15 minutes.
-              </p>
-              <div className="mt-8 flex flex-col gap-2">
-                <a
-                  href="https://inbox.purelymail.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-primary inline-flex w-full items-center justify-center"
-                >
-                  Go to webmail
-                </a>
-                <button onClick={() => setSent(false)} className="btn-secondary w-full">
-                  Use a different email
-                </button>
-              </div>
-            </section>
-          ) : (
-            <form onSubmit={submit}>
-              <div className="text-center">
-                <h1 className="font-serif text-3xl text-accent-900">Sign in</h1>
-                <p className="mt-2 text-sm text-ink-700">
-                  We'll email you a one-time sign-in link.
+            <div className="mt-12">
+              {sent ? (
+                <SentState email={email} onReset={() => setSent(false)} />
+              ) : (
+                <SignInForm
+                  email={email}
+                  setEmail={setEmail}
+                  err={err}
+                  busy={busy}
+                  onSubmit={submit}
+                />
+              )}
+            </div>
+
+            <p className="mt-12 text-xs text-white/75">
+              Open source, MIT-licensed.{" "}
+              <a
+                href="https://github.com/bhartiyashesh/purelymailcalendar"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-white underline-offset-2 hover:underline"
+              >
+                View source
+              </a>
+              . Made by{" "}
+              <a
+                href="https://yasheshbharti.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-white underline-offset-2 hover:underline"
+              >
+                Yashesh Bharti
+              </a>
+              .
+            </p>
+          </section>
+
+          {/* Right: brand panel. Hidden on small screens so the form gets
+              the full viewport on mobile. */}
+          <aside className="relative hidden overflow-hidden lg:block">
+            <img
+              src="/signin-hero.jpg"
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+            />
+            <div
+              className="absolute inset-0 bg-gradient-to-br from-accent-600 via-accent-500 to-accent-700 mix-blend-multiply"
+              aria-hidden
+            />
+            <div className="relative flex h-full flex-col justify-between p-10 text-white">
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-[0.25em] text-white/85">
+                  Volume i &middot; Sign in
                 </p>
-                <p className="mt-1 font-serif text-[11px] uppercase tracking-[0.2em] text-accent-700">
-                  For mailboxes hosted at Purelymail
+                <h2 className="mt-3 max-w-xs text-3xl font-semibold leading-tight">
+                  A calendar for the{" "}
+                  <span className="italic font-normal">Purelymail</span> mailbox.
+                </h2>
+                <p className="mt-4 max-w-xs text-sm text-white/85">
+                  Send real meeting invites, track RSVPs, and let an on-device AI
+                  pull action items from your inbox.
                 </p>
               </div>
-
-              <div className="mt-8 space-y-3">
-                <div>
-                  <label className="label" htmlFor="signin-email">
-                    Email
-                  </label>
-                  <input
-                    id="signin-email"
-                    type="email"
-                    required
-                    autoFocus
-                    autoComplete="email"
-                    className="field"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-                {err && (
-                  <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {err}
-                  </div>
-                )}
-                <button
-                  type="submit"
-                  disabled={busy || !email}
-                  className="btn-primary w-full"
-                >
-                  {busy ? "Sending..." : "Send sign-in link"}
-                </button>
-              </div>
-
-              <p className="mt-6 text-center text-xs text-ink-600">
-                Not on Purelymail yet?{" "}
-                <a
-                  href="https://purelymail.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium text-accent-700 underline-offset-2 hover:text-accent-900 hover:underline"
-                >
-                  Get a mailbox
-                </a>
-                . Curious how this works?{" "}
-                <a
-                  href="/about"
-                  className="font-medium text-accent-700 underline-offset-2 hover:text-accent-900 hover:underline"
-                >
-                  Read the about page
-                </a>
-                .
-              </p>
-            </form>
-          )}
-
-          <div className="mt-10 border-t border-accent-900/20 pt-4">
-            <TrustLine />
-          </div>
-          <div className="mt-3">
-            <UnofficialNote />
-          </div>
-          </div>
+              <a
+                href="/about"
+                className="self-start rounded-full border border-white/30 px-4 py-1.5 text-[11px] uppercase tracking-[0.18em] text-white/90 transition hover:bg-white/10"
+              >
+                About this app
+              </a>
+            </div>
+          </aside>
         </div>
-      </main>
+      </div>
     </div>
+  );
+}
+
+
+function SignInForm({
+  email,
+  setEmail,
+  err,
+  busy,
+  onSubmit,
+}: {
+  email: string;
+  setEmail: (v: string) => void;
+  err: string | null;
+  busy: boolean;
+  onSubmit: (e: React.FormEvent) => void;
+}) {
+  return (
+    <form onSubmit={onSubmit} className="max-w-sm">
+      <h1 className="text-3xl font-semibold leading-tight tracking-tight text-white">
+        Welcome back.
+      </h1>
+      <p className="mt-2 text-sm text-white/85">
+        Enter the email on your Purelymail mailbox. We'll send a one-time sign-in
+        link that expires in 15 minutes.
+      </p>
+
+      <div className="mt-8">
+        <label htmlFor="signin-email" className="sr-only">
+          Email
+        </label>
+        <div className="relative">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-white/70"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M2.5 4.5h11v7a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-7Z"
+                stroke="currentColor"
+                strokeWidth="1.4"
+              />
+              <path d="m3 5 5 4 5-4" stroke="currentColor" strokeWidth="1.4" />
+            </svg>
+          </span>
+          <input
+            id="signin-email"
+            type="email"
+            required
+            autoFocus
+            autoComplete="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="block w-full rounded-xl border border-white/15 bg-white/[0.04] py-3 pl-11 pr-4 text-sm text-white placeholder:text-white/70 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
+          />
+        </div>
+
+        {err && (
+          <div className="mt-3 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+            {err}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={busy || !email}
+          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-accent-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 focus:ring-offset-ink-900 disabled:opacity-50"
+        >
+          {busy ? "Sending..." : "Send sign-in link"}
+          {!busy && (
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+              <path
+                d="M3 8h9m0 0L8.5 4.5M12 8l-3.5 3.5"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            </svg>
+          )}
+        </button>
+      </div>
+
+      <p className="mt-6 text-xs text-white/80">
+        Not on Purelymail yet?{" "}
+        <a
+          href="https://purelymail.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-white/85 underline-offset-2 hover:underline"
+        >
+          Get a mailbox
+        </a>
+        .
+      </p>
+    </form>
+  );
+}
+
+
+function SentState({ email, onReset }: { email: string; onReset: () => void }) {
+  return (
+    <section className="max-w-sm">
+      <h1 className="text-3xl font-semibold leading-tight tracking-tight text-white">
+        Check your email.
+      </h1>
+      <p className="mt-3 text-sm text-white/85">
+        A sign-in link is on its way to{" "}
+        <span className="font-medium text-white">{email}</span>. It expires in
+        15 minutes.
+      </p>
+      <div className="mt-8 flex flex-col gap-2">
+        <a
+          href="https://inbox.purelymail.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex w-full items-center justify-center rounded-xl bg-accent-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-500"
+        >
+          Go to webmail
+        </a>
+        <button
+          onClick={onReset}
+          className="inline-flex w-full items-center justify-center rounded-xl border border-white/15 bg-white/[0.04] px-5 py-3 text-sm font-medium text-white/85 transition hover:bg-white/10"
+        >
+          Use a different email
+        </button>
+      </div>
+    </section>
   );
 }

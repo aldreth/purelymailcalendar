@@ -118,6 +118,30 @@ def stub_externals(monkeypatch):
         "calinvite_web.mailer_transactional.send_magic_link",
         lambda *a, **kw: None,
     )
+    # AI-tasks: stub IMAP listing so /api/inbox/recent works offline.
+    from calinvite.inbound_invites import InboxMessage as _IM
+
+    def _fake_inbox(creds, since_days=14, limit=50):
+        return [
+            _IM(
+                message_uid="msg-1@example.com",
+                subject="Project kickoff",
+                from_="boss@example.com",
+                date=datetime(2026, 5, 17, 9, 0),
+                body_text="Hey team, please send your updates by Friday.",
+                truncated=False,
+            ),
+            _IM(
+                message_uid="msg-2@example.com",
+                subject="Lunch?",
+                from_="friend@example.com",
+                date=datetime(2026, 5, 18, 12, 0),
+                body_text="Free Thursday?",
+                truncated=False,
+            ),
+        ]
+
+    monkeypatch.setattr("calinvite_web.services.list_recent_inbox", _fake_inbox)
     return monkeypatch
 
 

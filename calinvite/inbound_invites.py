@@ -19,7 +19,7 @@ import email
 import imaplib
 import ssl
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Iterator, List, Optional
 
 from icalendar import Calendar as ICalendar
@@ -34,6 +34,20 @@ class InviteResult:
     action: str          # "created" | "updated" | "cancelled" | "skipped" | "error"
     success: bool
     detail: str = ""
+
+
+@dataclass
+class InboxMessage:
+    """A trimmed read-only view of an inbox email, used by the AI-tasks
+    feature. `body_text` is the best-effort plain-text body, decoded and
+    truncated to a configurable byte cap so a downstream prompt doesn't
+    blow past the model's context window."""
+    message_uid: str
+    subject: str
+    from_: str
+    date: Optional[datetime]
+    body_text: str
+    truncated: bool
 
 
 def _imap_connect(host: str, port: int, user: str, password: str) -> imaplib.IMAP4_SSL:
@@ -183,3 +197,135 @@ def sync_inbox_invites(
             pass
         m.logout()
     return results
+
+
+def _decode_header(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    try:
+        from email.header import decode_header, make_header
+        return str(make_header(decode_header(value)))
+    except Exception:
+        return value
+
+
+def _extract_text_body(msg: email.message.Message) -> str:
+    """Best-effort: prefer text/plain; fall back to text/html with tags
+    stripped. We don't render emails here, we just need enough words for
+    a local LLM to reason over them."""
+    plain_chunks: List[str] = []
+    html_chunks: List[str] = []
+    for part in msg.walk():
+        if part.is_multipart():
+            continue
+        ctype = part.get_content_type()
+        disp = (part.get("Content-Disposition") or "").lower()
+        if "attachment" in disp:
+            continue
+        try:
+            payload = part.get_payload(decode=True) or b""
+            charset = part.get_content_charset() or "utf-8"
+            text = payload.decode(charset, errors="replace")
+        except Exception:
+            continue
+        if ctype == "text/plain":
+            plain_chunks.append(text)
+        elif ctype == "text/html":
+            html_chunks.append(text)
+
+    if plain_chunks:
+        return "\n".join(plain_chunks)
+    if html_chunks:
+        import re
+        # Strip <script>/<style> blocks, then drop remaining tags. A real
+        # HTML parser is overkill here; the body is going to a local LLM
+        # that's already noise-tolerant.
+        joined = "\n".join(html_chunks)
+        joined = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", joined)
+        joined = re.sub(r"(?s)<[^>]+>", " ", joined)
+        joined = re.sub(r"\s+", " ", joined).strip()
+        return joined
+    return ""
+
+
+def list_recent_messages(
+    *,
+    imap_host: str,
+    imap_port: int,
+    imap_user: str,
+    imap_pass: str,
+    mailbox: str = "INBOX",
+    since_days: int = 14,
+    limit: int = 50,
+    body_byte_cap: int = 8 * 1024,
+) -> List[InboxMessage]:
+    """Read-only listing of recent emails for the AI-tasks scanner.
+
+    Uses BODY.PEEK[] so messages stay unread in the user's actual mailbox
+    even after we fetch them. Bodies are decoded best-effort (plain or
+    stripped HTML) and capped at `body_byte_cap` so a downstream LLM
+    prompt doesn't overflow the model's context.
+    """
+    out: List[InboxMessage] = []
+    m = _imap_connect(imap_host, imap_port, imap_user, imap_pass)
+    try:
+        typ, _ = m.select(mailbox, readonly=True)
+        if typ != "OK":
+            raise RuntimeError(f"cannot select mailbox '{mailbox}'")
+        criteria = "ALL"
+        if since_days and since_days > 0:
+            since_dt = datetime.utcnow() - timedelta(days=since_days)
+            criteria = f'SINCE {since_dt.strftime("%d-%b-%Y")}'
+        typ, data = m.search(None, criteria)
+        if typ != "OK" or not data or not data[0]:
+            return out
+        # Most-recent-first: IMAP returns ascending; reverse and clamp.
+        ids = list(reversed(data[0].split()))[:limit]
+        for num in ids:
+            # BODY.PEEK[] is explicitly read-only — does not set \Seen.
+            typ, msg_data = m.fetch(num, "(BODY.PEEK[])")
+            if typ != "OK" or not msg_data or not msg_data[0]:
+                continue
+            raw = msg_data[0][1]
+            msg = email.message_from_bytes(raw)
+
+            subject = _decode_header(msg.get("Subject"))
+            sender = _decode_header(msg.get("From"))
+            date_hdr = msg.get("Date")
+            parsed_date: Optional[datetime] = None
+            if date_hdr:
+                try:
+                    from email.utils import parsedate_to_datetime
+                    parsed_date = parsedate_to_datetime(date_hdr)
+                    if parsed_date is not None and parsed_date.tzinfo is not None:
+                        # Normalize to naive UTC so downstream callers can
+                        # compare against the last-scan checkpoint without
+                        # any timezone fragility.
+                        parsed_date = parsed_date.astimezone(timezone.utc).replace(tzinfo=None)
+                except Exception:
+                    parsed_date = None
+
+            body = _extract_text_body(msg)
+            truncated = False
+            if len(body.encode("utf-8")) > body_byte_cap:
+                # Cap by bytes to keep the LLM prompt bounded. Cuts cleanly
+                # on a UTF-8 boundary by decoding from the truncated bytes.
+                body = body.encode("utf-8")[:body_byte_cap].decode("utf-8", errors="ignore")
+                truncated = True
+
+            message_uid = (msg.get("Message-ID") or "").strip("<>") or num.decode("ascii", errors="replace")
+            out.append(InboxMessage(
+                message_uid=message_uid,
+                subject=subject,
+                from_=sender,
+                date=parsed_date,
+                body_text=body,
+                truncated=truncated,
+            ))
+    finally:
+        try:
+            m.close()
+        except Exception:
+            pass
+        m.logout()
+    return out
