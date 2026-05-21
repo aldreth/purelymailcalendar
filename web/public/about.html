@@ -260,6 +260,31 @@
       }
       .columns .feature p { font-size: 15px; line-height: 1.55; }
 
+      dl.reference { margin: 8px 0 16px; padding: 0; }
+      dl.reference dt {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 17px;
+        font-weight: 500;
+        margin: 20px 0 4px;
+        line-height: 1.3;
+      }
+      dl.reference dt:first-of-type { margin-top: 4px; }
+      dl.reference dt a {
+        color: var(--coral-dark);
+        text-decoration: none;
+      }
+      dl.reference dt a:hover {
+        color: var(--coral);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+      dl.reference dd {
+        margin: 0;
+        font-size: 15.5px;
+        line-height: 1.55;
+        color: var(--ink-700);
+      }
+
       .ready {
         margin-top: 64px;
         padding: 36px 0;
@@ -312,8 +337,8 @@
   <body>
     <header class="site">
       <a href="/" class="brand">Purelymail Calendar</a>
-      <span class="dateline" id="dateline"></span>
       <nav>
+        <a href="#references">References</a>
         <a href="/blog/private-by-design-ai">Blog</a>
         <a href="https://github.com/bhartiyashesh/purelymailcalendar/wiki/On%E2%80%90device-AI-in-Purelymail-Calendar" target="_blank" rel="noopener noreferrer">Wiki</a>
         <a href="https://github.com/bhartiyashesh/purelymailcalendar" rel="noopener noreferrer" target="_blank">Source</a>
@@ -330,6 +355,20 @@
         top of any mailbox hosted at Purelymail. The events live on Purelymail's
         CalDAV servers, where they already were. This is the magazine the
         calendar lives in.
+      </p>
+
+      <h2>The short answer.</h2>
+      <p>
+        Purelymail already has calendar storage through CalDAV. Purelymail Calendar
+        does not replace that. It gives Purelymail users the missing scheduling
+        layer: a web calendar interface, real meeting invitations, RSVP tracking,
+        updates, cancellations, recurring events, and automatic inbox invite sync.
+      </p>
+      <p>
+        Your events stay in Purelymail's CalDAV calendar. Purelymail Calendar acts
+        as the interface and scheduling engine around it. For the feature-by-feature
+        comparison, see
+        <a href="/purelymail-calendar-feature">Does Purelymail have a calendar?</a>.
       </p>
 
       <h2>Why this exists.</h2>
@@ -416,6 +455,54 @@
         your encrypted mailbox credentials, and your active session cookie.
       </p>
 
+      <h2 id="references">References.</h2>
+      <p>
+        Background reading for anyone deciding whether Purelymail Calendar fits,
+        or trying to understand how each piece talks to Purelymail.
+      </p>
+      <dl class="reference">
+        <dt>
+          <a href="/purelymail-calendar-feature">Does Purelymail have a calendar?</a>
+        </dt>
+        <dd>
+          The feature-by-feature comparison. Purelymail provides CalDAV storage;
+          Purelymail Calendar adds the scheduling layer on top.
+        </dd>
+
+        <dt>
+          <a href="/docs/send-meeting-invites-with-purelymail">How to send meeting invites with Purelymail</a>
+        </dt>
+        <dd>
+          The iTIP / iMIP flow over Purelymail SMTP, IMAP, and CalDAV, with the
+          MIME rules that Gmail, Apple Mail, and Outlook actually render as
+          meeting invitations.
+        </dd>
+
+        <dt>
+          <a href="/docs/connect-purelymail-caldav-to-apple-calendar">Connect Purelymail CalDAV to Apple Calendar</a>
+        </dt>
+        <dd>
+          Step-by-step setup on macOS and iOS with the exact server, port, and
+          path values, plus the most common gotchas.
+        </dd>
+
+        <dt>
+          <a href="/docs/purelymail-caldav-rsvp-tracking">Purelymail CalDAV RSVP tracking</a>
+        </dt>
+        <dd>
+          How attendee replies arrive over IMAP and get written back to the
+          CalDAV event as <code>PARTSTAT</code> updates.
+        </dd>
+
+        <dt>
+          <a href="/compare/purelymail-calendar-vs-fastmail-calendar">Purelymail Calendar vs Fastmail Calendar</a>
+        </dt>
+        <dd>
+          Architecture and feature comparison for shoppers weighing the two
+          ecosystems.
+        </dd>
+      </dl>
+
       <h2>Frequently asked.</h2>
 
       <h3>Is this an official Purelymail product?</h3>
@@ -475,15 +562,6 @@
         <a href="https://github.com/bhartiyashesh/purelymailcalendar" rel="noopener noreferrer" target="_blank">Source on GitHub</a>.
       </p>
     </footer>
-
-    <script>
-      var d = new Date();
-      var s = d.toLocaleDateString(undefined, {
-        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
-      });
-      var el = document.getElementById('dateline');
-      if (el) el.textContent = s;
-    </script>
 
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-06E18161QX"></script>

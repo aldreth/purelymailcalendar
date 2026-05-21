@@ -441,9 +441,12 @@ _static_dir = Path(__file__).resolve().parent.parent / "web" / "dist"
 # about page at `web/public/about.html`. Mount a dedicated /about route
 # that reads from whichever location is present, so navigating to
 # /about works both in dev (Vite proxies to us) and in prod.
+# Public is preferred so dev edits show up without a rebuild; in prod
+# only `dist/` exists in the container (see Dockerfile) so the
+# fallback path wins on its own.
 _about_candidates = [
-    Path(__file__).resolve().parent.parent / "web" / "dist" / "about.html",
     Path(__file__).resolve().parent.parent / "web" / "public" / "about.html",
+    Path(__file__).resolve().parent.parent / "web" / "dist" / "about.html",
 ]
 
 
@@ -474,12 +477,40 @@ _content_pages = [
         Path(__file__).resolve().parent.parent / "web" / "dist" / "blog" / "private-by-design-ai.html",
         Path(__file__).resolve().parent.parent / "web" / "public" / "blog" / "private-by-design-ai.html",
     ),
+    (
+        "/purelymail-calendar-feature",
+        Path(__file__).resolve().parent.parent / "web" / "dist" / "purelymail-calendar-feature.html",
+        Path(__file__).resolve().parent.parent / "web" / "public" / "purelymail-calendar-feature.html",
+    ),
+    (
+        "/docs/send-meeting-invites-with-purelymail",
+        Path(__file__).resolve().parent.parent / "web" / "dist" / "docs" / "send-meeting-invites-with-purelymail.html",
+        Path(__file__).resolve().parent.parent / "web" / "public" / "docs" / "send-meeting-invites-with-purelymail.html",
+    ),
+    (
+        "/docs/connect-purelymail-caldav-to-apple-calendar",
+        Path(__file__).resolve().parent.parent / "web" / "dist" / "docs" / "connect-purelymail-caldav-to-apple-calendar.html",
+        Path(__file__).resolve().parent.parent / "web" / "public" / "docs" / "connect-purelymail-caldav-to-apple-calendar.html",
+    ),
+    (
+        "/docs/purelymail-caldav-rsvp-tracking",
+        Path(__file__).resolve().parent.parent / "web" / "dist" / "docs" / "purelymail-caldav-rsvp-tracking.html",
+        Path(__file__).resolve().parent.parent / "web" / "public" / "docs" / "purelymail-caldav-rsvp-tracking.html",
+    ),
+    (
+        "/compare/purelymail-calendar-vs-fastmail-calendar",
+        Path(__file__).resolve().parent.parent / "web" / "dist" / "compare" / "purelymail-calendar-vs-fastmail-calendar.html",
+        Path(__file__).resolve().parent.parent / "web" / "public" / "compare" / "purelymail-calendar-vs-fastmail-calendar.html",
+    ),
 ]
 
 
 def _make_content_route(dist_path: Path, public_path: Path):
     def _serve():
-        for p in (dist_path, public_path):
+        # Public first so dev edits show up without a rebuild; in prod
+        # only `dist/` is shipped (see Dockerfile) so the fallback path
+        # wins on its own.
+        for p in (public_path, dist_path):
             if p.is_file():
                 return FileResponse(p)
         raise HTTPException(status_code=404, detail="page not found")

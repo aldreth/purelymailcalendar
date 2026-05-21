@@ -94,6 +94,11 @@ README, and at https://purelymailcalendar.com/api/version.
 
 - Home: https://purelymailcalendar.com/
 - About: https://purelymailcalendar.com/about
+- Feature comparison (Purelymail CalDAV vs Purelymail Calendar): https://purelymailcalendar.com/purelymail-calendar-feature
+- Docs: send meeting invites with Purelymail: https://purelymailcalendar.com/docs/send-meeting-invites-with-purelymail
+- Docs: connect Purelymail CalDAV to Apple Calendar: https://purelymailcalendar.com/docs/connect-purelymail-caldav-to-apple-calendar
+- Docs: Purelymail CalDAV RSVP tracking: https://purelymailcalendar.com/docs/purelymail-caldav-rsvp-tracking
+- Compare: Purelymail Calendar vs Fastmail Calendar: https://purelymailcalendar.com/compare/purelymail-calendar-vs-fastmail-calendar
 - Sign in: https://purelymailcalendar.com/login
 - Health check (JSON): https://purelymailcalendar.com/api/health
 - Build provenance (JSON): https://purelymailcalendar.com/api/version

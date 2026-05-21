@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#e94b35" />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="Yashesh Bharti" />
+
+    <title>How to send meeting invites with Purelymail (iTIP/iMIP guide)</title>
+    <meta
+      name="description"
+      content="Purelymail handles email and CalDAV calendar storage, but it does not include a built-in meeting-invite scheduler. Here is how to send standards-compliant iTIP/iMIP meeting invitations from a Purelymail mailbox, and how Purelymail Calendar automates the flow."
+    />
+    <meta
+      name="keywords"
+      content="send meeting invite Purelymail, Purelymail iTIP, Purelymail iMIP, Purelymail meeting invite SMTP, Purelymail calendar invite, RFC 5546 Purelymail"
+    />
+
+    <link rel="canonical" href="https://purelymailcalendar.com/docs/send-meeting-invites-with-purelymail" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap"
+      rel="stylesheet"
+    />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Purelymail Calendar" />
+    <meta property="og:title" content="How to send meeting invites with Purelymail" />
+    <meta
+      property="og:description"
+      content="Purelymail does not include a built-in meeting-invite scheduler. Here is the iTIP/iMIP flow over Purelymail SMTP, IMAP, and CalDAV, and how Purelymail Calendar automates it."
+    />
+    <meta property="og:url" content="https://purelymailcalendar.com/docs/send-meeting-invites-with-purelymail" />
+    <meta property="og:image" content="https://purelymailcalendar.com/logo.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="How to send meeting invites with Purelymail" />
+    <meta
+      name="twitter:description"
+      content="The iTIP/iMIP flow over Purelymail SMTP, IMAP, and CalDAV, plus how Purelymail Calendar automates it. Unofficial, open-source."
+    />
+    <meta name="twitter:image" content="https://purelymailcalendar.com/logo.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": "How to send meeting invites with Purelymail",
+        "description": "Purelymail does not include a built-in meeting-invite scheduler. This guide explains the iTIP/iMIP flow over Purelymail SMTP, IMAP, and CalDAV, and how Purelymail Calendar automates each step.",
+        "url": "https://purelymailcalendar.com/docs/send-meeting-invites-with-purelymail",
+        "mainEntityOfPage": "https://purelymailcalendar.com/docs/send-meeting-invites-with-purelymail",
+        "author": {
+          "@type": "Person",
+          "name": "Yashesh Bharti",
+          "url": "https://yasheshbharti.com"
+        },
+        "publisher": {
+          "@type": "Person",
+          "name": "Yashesh Bharti",
+          "url": "https://yasheshbharti.com"
+        },
+        "about": {
+          "@type": "SoftwareApplication",
+          "name": "Purelymail Calendar",
+          "applicationCategory": "ProductivityApplication",
+          "operatingSystem": "Web",
+          "url": "https://purelymailcalendar.com/",
+          "isAccessibleForFree": true
+        },
+        "image": "https://purelymailcalendar.com/logo.png",
+        "inLanguage": "en"
+      }
+    </script>
+
+    <style>
+      :root {
+        --ink-500: #64748b;
+        --ink-600: #475569;
+        --ink-700: #334155;
+        --ink-800: #1e293b;
+        --ink-900: #0f172a;
+        --paper:   #ffffff;
+        --paper-2: #f5f5f5;
+        --coral-light: #ff6b5a;
+        --coral:   #e94b35;
+        --coral-dark: #7a1f14;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-weight: 500;
+        background: #ffffff;
+        color: #000000;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      header.site {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 24px 24px 12px;
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        border-bottom: 1px solid rgba(122, 31, 20, 0.3);
+      }
+      header.site a.brand {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 20px;
+        font-weight: 500;
+        color: var(--coral-dark);
+        text-decoration: none;
+      }
+      header.site .dateline {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-style: italic;
+        font-size: 13px;
+        color: rgba(122, 31, 20, 0.7);
+      }
+      header.site nav {
+        margin-left: auto;
+        display: flex;
+        gap: 20px;
+        align-items: baseline;
+      }
+      header.site nav a {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 12px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: rgba(122, 31, 20, 0.7);
+        text-decoration: none;
+      }
+      header.site nav a:hover { color: var(--coral-dark); }
+      header.site nav a.cta {
+        color: #fff;
+        background: var(--coral);
+        padding: 6px 12px;
+        border-radius: 4px;
+        letter-spacing: 0.08em;
+      }
+      header.site nav a.cta:hover { background: var(--coral-dark); }
+
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 48px 24px 64px;
+      }
+      .eyebrow {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.25em;
+        color: var(--coral);
+        margin-bottom: 16px;
+      }
+      h1 {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 44px;
+        line-height: 1.08;
+        font-weight: 500;
+        color: var(--coral-dark);
+        margin: 0 0 24px;
+        letter-spacing: -0.01em;
+      }
+
+      .answer-block {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 20px;
+        line-height: 1.5;
+        color: var(--ink-700);
+        margin: 0 0 40px;
+        max-width: 38em;
+      }
+      .answer-block p { margin: 0 0 16px; font-size: 20px; }
+      .answer-block p:last-child { margin-bottom: 0; }
+      .answer-block strong { font-weight: 500; color: var(--coral-dark); }
+
+      h2 {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 26px;
+        line-height: 1.2;
+        font-weight: 500;
+        color: var(--coral-dark);
+        margin: 48px 0 16px;
+        border-top: 1px solid rgba(122, 31, 20, 0.2);
+        padding-top: 28px;
+      }
+      h3 {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 18px;
+        font-weight: 500;
+        color: var(--coral-dark);
+        margin: 24px 0 6px;
+      }
+      p { margin: 0 0 16px; font-size: 16px; }
+      a { color: var(--coral); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+      a:hover { color: var(--coral-dark); }
+      code {
+        background: var(--paper-2);
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 0.9em;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      pre.code {
+        background: var(--paper-2);
+        border: 1px solid rgba(122, 31, 20, 0.15);
+        border-radius: 6px;
+        padding: 16px 18px;
+        overflow-x: auto;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--ink-800);
+        margin: 8px 0 24px;
+      }
+
+      table.compare {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 8px 0 24px;
+        font-size: 15px;
+      }
+      table.compare th,
+      table.compare td {
+        text-align: left;
+        vertical-align: top;
+        padding: 12px 14px;
+        border-bottom: 1px solid rgba(122, 31, 20, 0.15);
+      }
+      table.compare thead th {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-weight: 500;
+        color: var(--coral-dark);
+        background: var(--paper-2);
+        border-bottom: 1px solid rgba(122, 31, 20, 0.3);
+      }
+      table.compare tbody th {
+        font-weight: 500;
+        color: var(--ink-800);
+        width: 30%;
+      }
+      table.compare tbody td { color: var(--ink-700); }
+      table.compare tr:last-child th,
+      table.compare tr:last-child td { border-bottom: none; }
+
+      .flow {
+        margin: 16px 0 28px;
+        padding: 20px;
+        border: 1px solid rgba(122, 31, 20, 0.18);
+        border-radius: 8px;
+        background: #fffaf8;
+      }
+      .flow-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: stretch;
+      }
+      .flow-node {
+        flex: 1 1 140px;
+        min-width: 130px;
+        background: #fff;
+        border: 1px solid rgba(122, 31, 20, 0.25);
+        border-radius: 6px;
+        padding: 12px 14px;
+        font-size: 13px;
+        color: var(--ink-800);
+        line-height: 1.45;
+      }
+      .flow-node .node-label {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--coral);
+        margin-bottom: 4px;
+      }
+      .flow-arrow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--coral);
+        font-size: 18px;
+        font-weight: 600;
+        width: 16px;
+      }
+      .flow-caption {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-style: italic;
+        font-size: 13px;
+        color: var(--ink-600);
+        margin-top: 12px;
+        text-align: center;
+      }
+
+      ul.links {
+        padding-left: 20px;
+        margin: 8px 0 24px;
+      }
+      ul.links li {
+        margin-bottom: 8px;
+        font-size: 16px;
+        color: var(--ink-700);
+      }
+
+      .ready {
+        margin-top: 56px;
+        padding: 32px 0;
+        border-top: 1px solid rgba(122, 31, 20, 0.3);
+        border-bottom: 1px solid rgba(122, 31, 20, 0.3);
+        text-align: center;
+      }
+      .ready a {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 26px;
+        font-style: italic;
+        color: var(--coral-dark);
+        text-decoration: none;
+      }
+      .ready a:hover { color: var(--coral); }
+
+      footer.site {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+        border-top: 1px solid rgba(122, 31, 20, 0.2);
+        color: var(--ink-600);
+      }
+      footer.site .colophon {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-style: italic;
+        font-size: 14px;
+        line-height: 1.6;
+        margin-bottom: 12px;
+      }
+      footer.site .colophon strong {
+        font-style: normal;
+        color: var(--coral-dark);
+      }
+      footer.site .small {
+        font-size: 11px;
+        color: var(--ink-500);
+        line-height: 1.6;
+      }
+      footer.site a { color: var(--coral); }
+
+      @media (max-width: 640px) {
+        h1 { font-size: 32px; }
+        .answer-block, .answer-block p { font-size: 17px; }
+        .flow-row { flex-direction: column; }
+        .flow-arrow { transform: rotate(90deg); width: auto; height: 16px; }
+        table.compare th, table.compare td { padding: 10px 10px; font-size: 14px; }
+        header.site nav a:not(.cta) { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site">
+      <a href="/" class="brand">Purelymail Calendar</a>
+      <nav>
+        <a href="/about">About</a>
+        <a href="/about#references">References</a>
+        <a href="/purelymail-calendar-feature">Feature</a>
+        <a href="https://github.com/bhartiyashesh/purelymailcalendar" rel="noopener noreferrer" target="_blank">Source</a>
+        <a href="/" class="cta">Sign in</a>
+      </nav>
+    </header>
+
+    <main>
+      <p class="eyebrow">Docs</p>
+      <h1>How to send meeting invites with Purelymail</h1>
+
+      <div class="answer-block">
+        <p>
+          Purelymail handles email and CalDAV calendar storage, but it does not include
+          a built-in meeting-invite scheduler. To send a calendar invitation that appears
+          as a real RSVP-able event in Gmail, Apple Mail, and Outlook, you need an
+          iTIP/iMIP layer on top of your Purelymail SMTP.
+        </p>
+        <p>
+          <strong>Purelymail Calendar</strong> is the unofficial open-source companion
+          app that adds that layer. It composes the iCalendar REQUEST payload, sends it
+          from your own Purelymail SMTP, writes the event to your Purelymail CalDAV
+          calendar, and tracks attendee replies over IMAP.
+        </p>
+      </div>
+
+      <h2>The flow.</h2>
+      <div class="flow">
+        <div class="flow-row">
+          <div class="flow-node">
+            <div class="node-label">Organizer</div>
+            Picks time, title, attendees in Purelymail Calendar.
+          </div>
+          <div class="flow-arrow" aria-hidden>&rarr;</div>
+          <div class="flow-node">
+            <div class="node-label">CalDAV PUT</div>
+            VEVENT written to <code>purelymail.com/webdav/</code>.
+          </div>
+          <div class="flow-arrow" aria-hidden>&rarr;</div>
+          <div class="flow-node">
+            <div class="node-label">SMTP send</div>
+            iTIP <code>REQUEST</code> email to each attendee via your Purelymail SMTP.
+          </div>
+          <div class="flow-arrow" aria-hidden>&rarr;</div>
+          <div class="flow-node">
+            <div class="node-label">IMAP poll</div>
+            Attendee replies pulled from your inbox; <code>PARTSTAT</code> applied to CalDAV.
+          </div>
+        </div>
+        <p class="flow-caption">
+          One Purelymail mailbox provides SMTP, IMAP, and CalDAV. Purelymail Calendar
+          orchestrates them.
+        </p>
+      </div>
+
+      <h2>What runs where.</h2>
+      <table class="compare">
+        <thead>
+          <tr>
+            <th scope="col">Step</th>
+            <th scope="col">What you do</th>
+            <th scope="col">Where it runs</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Compose event</th>
+            <td>Set time, title, attendees, description.</td>
+            <td>Purelymail Calendar web UI.</td>
+          </tr>
+          <tr>
+            <th scope="row">Save event</th>
+            <td>Stored as an iCalendar VEVENT.</td>
+            <td>Purelymail CalDAV (<code>/webdav/</code>).</td>
+          </tr>
+          <tr>
+            <th scope="row">Send invite</th>
+            <td>iTIP <code>REQUEST</code> email with .ics attachment.</td>
+            <td>Your Purelymail SMTP (<code>smtp.purelymail.com</code>).</td>
+          </tr>
+          <tr>
+            <th scope="row">Track replies</th>
+            <td>Pull <code>METHOD:REPLY</code> emails every five minutes.</td>
+            <td>Your Purelymail IMAP (<code>imap.purelymail.com</code>).</td>
+          </tr>
+          <tr>
+            <th scope="row">Apply RSVP</th>
+            <td><code>PARTSTAT</code> updated on the VEVENT.</td>
+            <td>Purelymail CalDAV.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Why the standards matter.</h2>
+      <p>
+        Gmail, Apple Mail, Outlook, and Thunderbird only render a message as a meeting
+        invitation when the MIME structure follows the iTIP / iMIP rules from
+        RFC 5545 and RFC 6047: a <code>multipart/mixed</code> outer body, a
+        <code>multipart/alternative</code> with a text part and a
+        <code>text/calendar; method=REQUEST</code> part, and a matching
+        <code>application/ics</code> attachment.
+      </p>
+      <p>
+        Sending a plain email from Purelymail webmail with an attached .ics file does
+        not trigger the calendar UI in most clients. The MIME shape is what makes the
+        Accept / Decline buttons appear.
+      </p>
+      <p>
+        One easy-to-miss rule: CalDAV servers must not accept events that contain a
+        top-level <code>METHOD</code> property, per RFC 4791 &sect;4.1. The same .ics
+        you email <em>must</em> have <code>METHOD:REQUEST</code>; the version you PUT
+        to CalDAV <em>must</em> have it stripped. Purelymail Calendar does that split
+        automatically.
+      </p>
+
+      <h2>What you do not need to do.</h2>
+      <p>
+        You do not need a separate SMTP relay, a transactional email provider, or a
+        third-party invite service. The invite is sent from your own Purelymail
+        mailbox, so attendees see the message coming from your real address and your
+        domain's SPF, DKIM, and DMARC records determine deliverability.
+      </p>
+
+      <h2>Where to go next.</h2>
+      <ul class="links">
+        <li>
+          <a href="/">Sign in to Purelymail Calendar</a> with your Purelymail mailbox
+          to send a real iTIP invite from your own address.
+        </li>
+        <li>
+          <a href="/purelymail-calendar-feature">Does Purelymail have a calendar?</a>
+          (feature comparison: what Purelymail provides natively vs. what this app adds).
+        </li>
+        <li>
+          <a href="/docs/purelymail-caldav-rsvp-tracking">RSVP tracking guide</a>:
+          how attendee replies flow back to the CalDAV event.
+        </li>
+        <li>
+          <a href="https://purelymail.com/docs/caldav" rel="noopener noreferrer" target="_blank">Purelymail's CalDAV docs</a>
+          and the
+          <a href="https://datatracker.ietf.org/doc/html/rfc5546" rel="noopener noreferrer" target="_blank">iTIP RFC 5546</a>
+          for the protocol details.
+        </li>
+        <li>
+          <a href="https://github.com/bhartiyashesh/purelymailcalendar" rel="noopener noreferrer" target="_blank">Source on GitHub</a>
+          (MIT). Read <code>calinvite/itip.py</code> for the MIME construction.
+        </li>
+        <li>
+          <a href="/about">About Purelymail Calendar</a>: how the app handles
+          credentials and where your data lives.
+        </li>
+      </ul>
+
+      <div class="ready">
+        <a href="/">Sign in to Purelymail Calendar &nbsp;&rarr;</a>
+      </div>
+    </main>
+
+    <footer class="site">
+      <p class="colophon">
+        <strong>Unofficial companion app.</strong> Purelymail Calendar is an
+        independent, open-source project for Purelymail mailbox users. Events live on
+        Purelymail's CalDAV servers; this app is the scheduling interface around them.
+      </p>
+      <p class="small">
+        Purelymail Calendar is not affiliated with, endorsed by, or sponsored by
+        Purelymail. Made by
+        <a href="https://yasheshbharti.com" rel="noopener noreferrer" target="_blank">Yashesh Bharti</a>.
+        <a href="https://github.com/bhartiyashesh/purelymailcalendar" rel="noopener noreferrer" target="_blank">Source on GitHub</a>.
+      </p>
+    </footer>
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-06E18161QX"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-06E18161QX');
+    </script>
+  </body>
+</html>

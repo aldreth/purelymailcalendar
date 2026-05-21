@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#e94b35" />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="Yashesh Bharti" />
+
+    <title>Purelymail Calendar vs Fastmail Calendar (feature and architecture)</title>
+    <meta
+      name="description"
+      content="Fastmail Calendar is a paid, fully integrated scheduling product. Purelymail by itself only provides CalDAV storage. Purelymail Calendar is the unofficial open-source companion app that adds the scheduling layer Purelymail does not ship. Here is the comparison."
+    />
+    <meta
+      name="keywords"
+      content="Purelymail vs Fastmail, Purelymail Calendar vs Fastmail Calendar, alternative to Fastmail Calendar, cheap Fastmail alternative, Purelymail scheduling"
+    />
+
+    <link rel="canonical" href="https://purelymailcalendar.com/compare/purelymail-calendar-vs-fastmail-calendar" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap"
+      rel="stylesheet"
+    />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Purelymail Calendar" />
+    <meta property="og:title" content="Purelymail Calendar vs Fastmail Calendar" />
+    <meta
+      property="og:description"
+      content="Fastmail bundles a full calendar product into its paid plan. Purelymail ships only CalDAV storage. Purelymail Calendar is the unofficial open-source app that adds the scheduling layer for Purelymail users."
+    />
+    <meta property="og:url" content="https://purelymailcalendar.com/compare/purelymail-calendar-vs-fastmail-calendar" />
+    <meta property="og:image" content="https://purelymailcalendar.com/logo.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Purelymail Calendar vs Fastmail Calendar" />
+    <meta
+      name="twitter:description"
+      content="Fastmail bundles a full calendar product. Purelymail ships only CalDAV storage. Purelymail Calendar is the unofficial open-source app that adds the scheduling layer for Purelymail users."
+    />
+    <meta name="twitter:image" content="https://purelymailcalendar.com/logo.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": "Purelymail Calendar vs Fastmail Calendar",
+        "description": "A factual comparison of Fastmail Calendar, Purelymail's native CalDAV storage, and Purelymail Calendar (the unofficial open-source companion app).",
+        "url": "https://purelymailcalendar.com/compare/purelymail-calendar-vs-fastmail-calendar",
+        "mainEntityOfPage": "https://purelymailcalendar.com/compare/purelymail-calendar-vs-fastmail-calendar",
+        "author": {
+          "@type": "Person",
+          "name": "Yashesh Bharti",
+          "url": "https://yasheshbharti.com"
+        },
+        "publisher": {
+          "@type": "Person",
+          "name": "Yashesh Bharti",
+          "url": "https://yasheshbharti.com"
+        },
+        "about": [
+          {
+            "@type": "SoftwareApplication",
+            "name": "Purelymail Calendar",
+            "applicationCategory": "ProductivityApplication",
+            "operatingSystem": "Web",
+            "url": "https://purelymailcalendar.com/",
+            "isAccessibleForFree": true
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "Fastmail Calendar",
+            "applicationCategory": "ProductivityApplication",
+            "url": "https://www.fastmail.com/features/email-calendar/"
+          }
+        ],
+        "image": "https://purelymailcalendar.com/logo.png",
+        "inLanguage": "en"
+      }
+    </script>
+
+    <style>
+      :root {
+        --ink-500: #64748b;
+        --ink-600: #475569;
+        --ink-700: #334155;
+        --ink-800: #1e293b;
+        --paper:   #ffffff;
+        --paper-2: #f5f5f5;
+        --coral:   #e94b35;
+        --coral-dark: #7a1f14;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-weight: 500;
+        background: #ffffff;
+        color: #000000;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      header.site {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 24px 24px 12px;
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        border-bottom: 1px solid rgba(122, 31, 20, 0.3);
+      }
+      header.site a.brand {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 20px;
+        font-weight: 500;
+        color: var(--coral-dark);
+        text-decoration: none;
+      }
+      header.site .dateline {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-style: italic;
+        font-size: 13px;
+        color: rgba(122, 31, 20, 0.7);
+      }
+      header.site nav {
+        margin-left: auto;
+        display: flex;
+        gap: 20px;
+        align-items: baseline;
+      }
+      header.site nav a {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 12px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: rgba(122, 31, 20, 0.7);
+        text-decoration: none;
+      }
+      header.site nav a:hover { color: var(--coral-dark); }
+      header.site nav a.cta {
+        color: #fff;
+        background: var(--coral);
+        padding: 6px 12px;
+        border-radius: 4px;
+        letter-spacing: 0.08em;
+      }
+      header.site nav a.cta:hover { background: var(--coral-dark); }
+
+      main {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 48px 24px 64px;
+      }
+      .eyebrow {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.25em;
+        color: var(--coral);
+        margin-bottom: 16px;
+      }
+      h1 {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 44px;
+        line-height: 1.08;
+        font-weight: 500;
+        color: var(--coral-dark);
+        margin: 0 0 24px;
+        letter-spacing: -0.01em;
+      }
+      .answer-block {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 20px;
+        line-height: 1.5;
+        color: var(--ink-700);
+        margin: 0 0 40px;
+        max-width: 40em;
+      }
+      .answer-block p { margin: 0 0 16px; font-size: 20px; }
+      .answer-block p:last-child { margin-bottom: 0; }
+      .answer-block strong { font-weight: 500; color: var(--coral-dark); }
+
+      h2 {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 26px;
+        line-height: 1.2;
+        font-weight: 500;
+        color: var(--coral-dark);
+        margin: 48px 0 16px;
+        border-top: 1px solid rgba(122, 31, 20, 0.2);
+        padding-top: 28px;
+      }
+      h3 {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 18px;
+        font-weight: 500;
+        color: var(--coral-dark);
+        margin: 24px 0 6px;
+      }
+      p { margin: 0 0 16px; font-size: 16px; }
+      a { color: var(--coral); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+      a:hover { color: var(--coral-dark); }
+      code {
+        background: var(--paper-2);
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 0.9em;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+
+      table.compare {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 8px 0 24px;
+        font-size: 14.5px;
+      }
+      table.compare th,
+      table.compare td {
+        text-align: left;
+        vertical-align: top;
+        padding: 12px 14px;
+        border-bottom: 1px solid rgba(122, 31, 20, 0.15);
+      }
+      table.compare thead th {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-weight: 500;
+        color: var(--coral-dark);
+        background: var(--paper-2);
+        border-bottom: 1px solid rgba(122, 31, 20, 0.3);
+      }
+      table.compare tbody th {
+        font-weight: 500;
+        color: var(--ink-800);
+        width: 28%;
+      }
+      table.compare tbody td { color: var(--ink-700); }
+      table.compare tr:last-child th,
+      table.compare tr:last-child td { border-bottom: none; }
+
+      .arch {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 12px;
+        margin: 16px 0 28px;
+      }
+      .arch .col {
+        border: 1px solid rgba(122, 31, 20, 0.22);
+        border-radius: 8px;
+        padding: 14px 16px;
+        background: #fffaf8;
+      }
+      .arch h4 {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--coral-dark);
+        margin: 0 0 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      .arch .layer {
+        background: #fff;
+        border: 1px solid rgba(122, 31, 20, 0.2);
+        border-radius: 5px;
+        padding: 8px 10px;
+        font-size: 12.5px;
+        color: var(--ink-800);
+        margin-bottom: 8px;
+        line-height: 1.4;
+      }
+      .arch .layer:last-child { margin-bottom: 0; }
+      .arch .layer .layer-label {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: var(--coral);
+        display: block;
+        margin-bottom: 2px;
+      }
+      .arch-caption {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-style: italic;
+        font-size: 13px;
+        color: var(--ink-600);
+        text-align: center;
+        margin-top: 4px;
+      }
+
+      ul.links {
+        padding-left: 20px;
+        margin: 8px 0 24px;
+      }
+      ul.links li {
+        margin-bottom: 8px;
+        font-size: 16px;
+        color: var(--ink-700);
+      }
+
+      .ready {
+        margin-top: 56px;
+        padding: 32px 0;
+        border-top: 1px solid rgba(122, 31, 20, 0.3);
+        border-bottom: 1px solid rgba(122, 31, 20, 0.3);
+        text-align: center;
+      }
+      .ready a {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 26px;
+        font-style: italic;
+        color: var(--coral-dark);
+        text-decoration: none;
+      }
+      .ready a:hover { color: var(--coral); }
+
+      footer.site {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+        border-top: 1px solid rgba(122, 31, 20, 0.2);
+        color: var(--ink-600);
+      }
+      footer.site .colophon {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-style: italic;
+        font-size: 14px;
+        line-height: 1.6;
+        margin-bottom: 12px;
+      }
+      footer.site .colophon strong {
+        font-style: normal;
+        color: var(--coral-dark);
+      }
+      footer.site .small {
+        font-size: 11px;
+        color: var(--ink-500);
+        line-height: 1.6;
+      }
+      footer.site a { color: var(--coral); }
+
+      @media (max-width: 720px) {
+        h1 { font-size: 32px; }
+        .answer-block, .answer-block p { font-size: 17px; }
+        .arch { grid-template-columns: 1fr; }
+        table.compare th, table.compare td { padding: 10px 10px; font-size: 13.5px; }
+        header.site nav a:not(.cta) { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site">
+      <a href="/" class="brand">Purelymail Calendar</a>
+      <nav>
+        <a href="/about">About</a>
+        <a href="/about#references">References</a>
+        <a href="/purelymail-calendar-feature">Feature</a>
+        <a href="https://github.com/bhartiyashesh/purelymailcalendar" rel="noopener noreferrer" target="_blank">Source</a>
+        <a href="/" class="cta">Sign in</a>
+      </nav>
+    </header>
+
+    <main>
+      <p class="eyebrow">Compare</p>
+      <h1>Purelymail Calendar vs Fastmail Calendar</h1>
+
+      <div class="answer-block">
+        <p>
+          <strong>Fastmail Calendar</strong> is a paid, fully integrated scheduling
+          product built into the Fastmail web interface. <strong>Purelymail</strong>
+          by itself ships CalDAV calendar storage without a comparable scheduling UI.
+          <strong>Purelymail Calendar</strong> is an unofficial open-source web app
+          that fills the gap for Purelymail users.
+        </p>
+        <p>
+          The pairing is independent of Purelymail and free to use; you only pay for
+          your underlying Purelymail mailbox. The events still live in Purelymail's
+          CalDAV calendar.
+        </p>
+      </div>
+
+      <h2>Architecture at a glance.</h2>
+      <div class="arch">
+        <div class="col">
+          <h4>Fastmail Calendar</h4>
+          <div class="layer">
+            <span class="layer-label">Front end</span>
+            Fastmail web UI (calendar tab) and native apps.
+          </div>
+          <div class="layer">
+            <span class="layer-label">Scheduling</span>
+            iTIP / iMIP invites, RSVP tracking, recurrence, inbox-to-calendar sync.
+          </div>
+          <div class="layer">
+            <span class="layer-label">Storage</span>
+            Fastmail-hosted CalDAV.
+          </div>
+          <div class="layer">
+            <span class="layer-label">Identity</span>
+            Fastmail mailbox account (paid).
+          </div>
+        </div>
+        <div class="col">
+          <h4>Purelymail (raw)</h4>
+          <div class="layer">
+            <span class="layer-label">Front end</span>
+            Purelymail webmail (no calendar tab).
+          </div>
+          <div class="layer">
+            <span class="layer-label">Scheduling</span>
+            Not provided. Use a CalDAV client of your choice.
+          </div>
+          <div class="layer">
+            <span class="layer-label">Storage</span>
+            Purelymail CalDAV at <code>/webdav/</code>.
+          </div>
+          <div class="layer">
+            <span class="layer-label">Identity</span>
+            Purelymail mailbox account (paid, cheaper).
+          </div>
+        </div>
+        <div class="col">
+          <h4>Purelymail + Purelymail Calendar</h4>
+          <div class="layer">
+            <span class="layer-label">Front end</span>
+            Purelymail Calendar web UI (this app).
+          </div>
+          <div class="layer">
+            <span class="layer-label">Scheduling</span>
+            iTIP / iMIP invites, RSVP tracking, recurrence, inbox-to-calendar sync.
+          </div>
+          <div class="layer">
+            <span class="layer-label">Storage</span>
+            Same Purelymail CalDAV (events unchanged).
+          </div>
+          <div class="layer">
+            <span class="layer-label">Identity</span>
+            Same Purelymail mailbox. No new vendor account.
+          </div>
+        </div>
+      </div>
+      <p class="arch-caption">
+        Purelymail Calendar replaces only the front-end and scheduling layers.
+        Storage and identity stay on Purelymail.
+      </p>
+
+      <h2>Feature by feature.</h2>
+      <table class="compare">
+        <thead>
+          <tr>
+            <th scope="col">Capability</th>
+            <th scope="col">Fastmail Calendar</th>
+            <th scope="col">Purelymail (CalDAV only)</th>
+            <th scope="col">Purelymail Calendar</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Web calendar UI</th>
+            <td>Yes, built in.</td>
+            <td>No.</td>
+            <td>Yes (month / week / day views).</td>
+          </tr>
+          <tr>
+            <th scope="row">iTIP meeting invites</th>
+            <td>Yes, built in.</td>
+            <td>No.</td>
+            <td>Yes (REQUEST / CANCEL).</td>
+          </tr>
+          <tr>
+            <th scope="row">RSVP tracking</th>
+            <td>Yes, built in.</td>
+            <td>No.</td>
+            <td>Yes (IMAP poll, <code>PARTSTAT</code> applied).</td>
+          </tr>
+          <tr>
+            <th scope="row">Recurring events</th>
+            <td>Yes.</td>
+            <td>Storage only.</td>
+            <td>Yes (with single-occurrence cancel).</td>
+          </tr>
+          <tr>
+            <th scope="row">Inbox invite sync</th>
+            <td>Yes.</td>
+            <td>No.</td>
+            <td>Yes (every 5 minutes).</td>
+          </tr>
+          <tr>
+            <th scope="row">Email + calendar bundled price</th>
+            <td>Yes (single Fastmail plan).</td>
+            <td>Yes (Purelymail plan, typically cheaper).</td>
+            <td>Free; uses your Purelymail mailbox.</td>
+          </tr>
+          <tr>
+            <th scope="row">Source available</th>
+            <td>No (proprietary).</td>
+            <td>No (proprietary server).</td>
+            <td>Yes (MIT licensed).</td>
+          </tr>
+          <tr>
+            <th scope="row">Self-hostable</th>
+            <td>No.</td>
+            <td>No.</td>
+            <td>Yes (Docker compose ships in the repo).</td>
+          </tr>
+          <tr>
+            <th scope="row">Hosted by</th>
+            <td>Fastmail.</td>
+            <td>Purelymail.</td>
+            <td>You, or <code>purelymailcalendar.com</code>.</td>
+          </tr>
+          <tr>
+            <th scope="row">Native mobile apps</th>
+            <td>Yes (iOS, Android).</td>
+            <td>Use any CalDAV client.</td>
+            <td>Web only today. Use Apple Calendar or DAVx5 alongside.</td>
+          </tr>
+          <tr>
+            <th scope="row">Search across email and calendar</th>
+            <td>Yes (unified).</td>
+            <td>No (separate clients).</td>
+            <td>Not unified with mail. Calendar search only.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>How to choose.</h2>
+      <h3>Pick Fastmail Calendar if</h3>
+      <p>
+        You want a single paid vendor for email and calendar with first-party mobile
+        apps, unified email-and-calendar search, and zero setup beyond signing up. The
+        scheduling and inbox sync just work, and there is no companion app to
+        install.
+      </p>
+      <h3>Pick Purelymail plus Purelymail Calendar if</h3>
+      <p>
+        You already use Purelymail and want the cheaper mailbox while keeping a real
+        scheduling layer, you prefer an open-source companion app you can audit or
+        self-host, and you are comfortable using a CalDAV client on mobile until
+        native apps exist.
+      </p>
+      <h3>Pick Purelymail without Purelymail Calendar if</h3>
+      <p>
+        You only need calendar storage that syncs to Apple Calendar, Thunderbird, or
+        DAVx5, and you do not need to send standards-compliant meeting invites or
+        track RSVPs.
+      </p>
+
+      <h2>Where to go next.</h2>
+      <ul class="links">
+        <li>
+          <a href="/">Sign in to Purelymail Calendar</a> and try the scheduling
+          layer on top of your existing Purelymail CalDAV calendar.
+        </li>
+        <li>
+          <a href="/purelymail-calendar-feature">Does Purelymail have a calendar?</a>
+          (full feature comparison page).
+        </li>
+        <li>
+          <a href="/docs/send-meeting-invites-with-purelymail">Send meeting invites with Purelymail</a>:
+          the iTIP/iMIP flow.
+        </li>
+        <li>
+          <a href="/docs/connect-purelymail-caldav-to-apple-calendar">Connect Purelymail CalDAV to Apple Calendar</a>
+          for native device sync.
+        </li>
+        <li>
+          <a href="https://purelymail.com/docs/caldav" rel="noopener noreferrer" target="_blank">Purelymail's CalDAV docs</a>
+          and
+          <a href="https://www.fastmail.com/features/email-calendar/" rel="noopener noreferrer" target="_blank">Fastmail's calendar page</a>
+          for the vendor sources.
+        </li>
+        <li>
+          <a href="https://github.com/bhartiyashesh/purelymailcalendar" rel="noopener noreferrer" target="_blank">Source on GitHub</a>
+          (MIT licensed).
+        </li>
+        <li>
+          <a href="/about">About Purelymail Calendar</a>: credential handling and
+          data residency.
+        </li>
+      </ul>
+
+      <div class="ready">
+        <a href="/">Sign in to Purelymail Calendar &nbsp;&rarr;</a>
+      </div>
+    </main>
+
+    <footer class="site">
+      <p class="colophon">
+        <strong>Unofficial companion app.</strong> Purelymail Calendar is an
+        independent, open-source project for Purelymail mailbox users. Events live on
+        Purelymail's CalDAV servers; this app is the scheduling interface around them.
+      </p>
+      <p class="small">
+        Purelymail Calendar is not affiliated with, endorsed by, or sponsored by
+        Purelymail. Fastmail is a registered trademark of Fastmail Pty Ltd, used here
+        only for descriptive comparison. Made by
+        <a href="https://yasheshbharti.com" rel="noopener noreferrer" target="_blank">Yashesh Bharti</a>.
+        <a href="https://github.com/bhartiyashesh/purelymailcalendar" rel="noopener noreferrer" target="_blank">Source on GitHub</a>.
+      </p>
+    </footer>
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-06E18161QX"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-06E18161QX');
+    </script>
+  </body>
+</html>

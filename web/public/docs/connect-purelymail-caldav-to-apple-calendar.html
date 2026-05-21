@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#e94b35" />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="Yashesh Bharti" />
+
+    <title>Connect Purelymail CalDAV to Apple Calendar (macOS, iOS)</title>
+    <meta
+      name="description"
+      content="Step-by-step setup for adding your Purelymail mailbox to Apple Calendar on macOS and iOS over CalDAV. Server, port, path, and credentials, plus how Purelymail Calendar adds meeting invites and RSVP tracking on top."
+    />
+    <meta
+      name="keywords"
+      content="Purelymail Apple Calendar, Purelymail CalDAV setup, Purelymail iPhone calendar, Purelymail macOS calendar, CalDAV server purelymail.com"
+    />
+
+    <link rel="canonical" href="https://purelymailcalendar.com/docs/connect-purelymail-caldav-to-apple-calendar" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap"
+      rel="stylesheet"
+    />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Purelymail Calendar" />
+    <meta property="og:title" content="Connect Purelymail CalDAV to Apple Calendar" />
+    <meta
+      property="og:description"
+      content="Step-by-step setup for adding your Purelymail mailbox to Apple Calendar on macOS and iOS over CalDAV. Server, port, path, and credentials."
+    />
+    <meta property="og:url" content="https://purelymailcalendar.com/docs/connect-purelymail-caldav-to-apple-calendar" />
+    <meta property="og:image" content="https://purelymailcalendar.com/logo.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Connect Purelymail CalDAV to Apple Calendar" />
+    <meta
+      name="twitter:description"
+      content="The exact server, port, path, and credentials for adding Purelymail CalDAV to Apple Calendar on macOS and iOS."
+    />
+    <meta name="twitter:image" content="https://purelymailcalendar.com/logo.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": "Connect Purelymail CalDAV to Apple Calendar",
+        "description": "Step-by-step setup for adding your Purelymail mailbox to Apple Calendar on macOS and iOS over CalDAV, including server, port, path, and credentials.",
+        "url": "https://purelymailcalendar.com/docs/connect-purelymail-caldav-to-apple-calendar",
+        "mainEntityOfPage": "https://purelymailcalendar.com/docs/connect-purelymail-caldav-to-apple-calendar",
+        "author": {
+          "@type": "Person",
+          "name": "Yashesh Bharti",
+          "url": "https://yasheshbharti.com"
+        },
+        "publisher": {
+          "@type": "Person",
+          "name": "Yashesh Bharti",
+          "url": "https://yasheshbharti.com"
+        },
+        "about": {
+          "@type": "SoftwareApplication",
+          "name": "Purelymail Calendar",
+          "applicationCategory": "ProductivityApplication",
+          "operatingSystem": "Web",
+          "url": "https://purelymailcalendar.com/",
+          "isAccessibleForFree": true
+        },
+        "image": "https://purelymailcalendar.com/logo.png",
+        "inLanguage": "en"
+      }
+    </script>
+
+    <style>
+      :root {
+        --ink-500: #64748b;
+        --ink-600: #475569;
+        --ink-700: #334155;
+        --ink-800: #1e293b;
+        --ink-900: #0f172a;
+        --paper:   #ffffff;
+        --paper-2: #f5f5f5;
+        --coral:   #e94b35;
+        --coral-dark: #7a1f14;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-weight: 500;
+        background: #ffffff;
+        color: #000000;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      header.site {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 24px 24px 12px;
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        border-bottom: 1px solid rgba(122, 31, 20, 0.3);
+      }
+      header.site a.brand {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 20px;
+        font-weight: 500;
+        color: var(--coral-dark);
+        text-decoration: none;
+      }
+      header.site .dateline {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-style: italic;
+        font-size: 13px;
+        color: rgba(122, 31, 20, 0.7);
+      }
+      header.site nav {
+        margin-left: auto;
+        display: flex;
+        gap: 20px;
+        align-items: baseline;
+      }
+      header.site nav a {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 12px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: rgba(122, 31, 20, 0.7);
+        text-decoration: none;
+      }
+      header.site nav a:hover { color: var(--coral-dark); }
+      header.site nav a.cta {
+        color: #fff;
+        background: var(--coral);
+        padding: 6px 12px;
+        border-radius: 4px;
+        letter-spacing: 0.08em;
+      }
+      header.site nav a.cta:hover { background: var(--coral-dark); }
+
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 48px 24px 64px;
+      }
+      .eyebrow {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.25em;
+        color: var(--coral);
+        margin-bottom: 16px;
+      }
+      h1 {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 44px;
+        line-height: 1.08;
+        font-weight: 500;
+        color: var(--coral-dark);
+        margin: 0 0 24px;
+        letter-spacing: -0.01em;
+      }
+      .answer-block {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 20px;
+        line-height: 1.5;
+        color: var(--ink-700);
+        margin: 0 0 40px;
+        max-width: 38em;
+      }
+      .answer-block p { margin: 0 0 16px; font-size: 20px; }
+      .answer-block p:last-child { margin-bottom: 0; }
+      .answer-block strong { font-weight: 500; color: var(--coral-dark); }
+
+      h2 {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 26px;
+        line-height: 1.2;
+        font-weight: 500;
+        color: var(--coral-dark);
+        margin: 48px 0 16px;
+        border-top: 1px solid rgba(122, 31, 20, 0.2);
+        padding-top: 28px;
+      }
+      h3 {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 18px;
+        font-weight: 500;
+        color: var(--coral-dark);
+        margin: 24px 0 6px;
+      }
+      p { margin: 0 0 16px; font-size: 16px; }
+      a { color: var(--coral); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+      a:hover { color: var(--coral-dark); }
+      code {
+        background: var(--paper-2);
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 0.9em;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+
+      ol.steps {
+        padding-left: 22px;
+        margin: 8px 0 24px;
+      }
+      ol.steps li {
+        margin-bottom: 10px;
+        font-size: 16px;
+        color: var(--ink-700);
+        padding-left: 6px;
+      }
+
+      table.compare {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 8px 0 24px;
+        font-size: 15px;
+      }
+      table.compare th,
+      table.compare td {
+        text-align: left;
+        vertical-align: top;
+        padding: 12px 14px;
+        border-bottom: 1px solid rgba(122, 31, 20, 0.15);
+      }
+      table.compare thead th {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-weight: 500;
+        color: var(--coral-dark);
+        background: var(--paper-2);
+        border-bottom: 1px solid rgba(122, 31, 20, 0.3);
+      }
+      table.compare tbody th {
+        font-weight: 500;
+        color: var(--ink-800);
+        width: 36%;
+      }
+      table.compare tbody td { color: var(--ink-700); }
+      table.compare tr:last-child th,
+      table.compare tr:last-child td { border-bottom: none; }
+      table.compare td code { word-break: break-all; }
+
+      .flow {
+        margin: 16px 0 28px;
+        padding: 20px;
+        border: 1px solid rgba(122, 31, 20, 0.18);
+        border-radius: 8px;
+        background: #fffaf8;
+      }
+      .flow-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: stretch;
+      }
+      .flow-node {
+        flex: 1 1 140px;
+        min-width: 130px;
+        background: #fff;
+        border: 1px solid rgba(122, 31, 20, 0.25);
+        border-radius: 6px;
+        padding: 12px 14px;
+        font-size: 13px;
+        color: var(--ink-800);
+        line-height: 1.45;
+      }
+      .flow-node .node-label {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--coral);
+        margin-bottom: 4px;
+      }
+      .flow-arrow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--coral);
+        font-size: 18px;
+        font-weight: 600;
+        width: 16px;
+      }
+      .flow-caption {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-style: italic;
+        font-size: 13px;
+        color: var(--ink-600);
+        margin-top: 12px;
+        text-align: center;
+      }
+
+      ul.links {
+        padding-left: 20px;
+        margin: 8px 0 24px;
+      }
+      ul.links li {
+        margin-bottom: 8px;
+        font-size: 16px;
+        color: var(--ink-700);
+      }
+
+      .ready {
+        margin-top: 56px;
+        padding: 32px 0;
+        border-top: 1px solid rgba(122, 31, 20, 0.3);
+        border-bottom: 1px solid rgba(122, 31, 20, 0.3);
+        text-align: center;
+      }
+      .ready a {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-size: 26px;
+        font-style: italic;
+        color: var(--coral-dark);
+        text-decoration: none;
+      }
+      .ready a:hover { color: var(--coral); }
+
+      footer.site {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+        border-top: 1px solid rgba(122, 31, 20, 0.2);
+        color: var(--ink-600);
+      }
+      footer.site .colophon {
+        font-family: "Newsreader", ui-serif, Georgia, serif;
+        font-style: italic;
+        font-size: 14px;
+        line-height: 1.6;
+        margin-bottom: 12px;
+      }
+      footer.site .colophon strong {
+        font-style: normal;
+        color: var(--coral-dark);
+      }
+      footer.site .small {
+        font-size: 11px;
+        color: var(--ink-500);
+        line-height: 1.6;
+      }
+      footer.site a { color: var(--coral); }
+
+      @media (max-width: 640px) {
+        h1 { font-size: 32px; }
+        .answer-block, .answer-block p { font-size: 17px; }
+        .flow-row { flex-direction: column; }
+        .flow-arrow { transform: rotate(90deg); width: auto; height: 16px; }
+        table.compare th, table.compare td { padding: 10px 10px; font-size: 14px; }
+        header.site nav a:not(.cta) { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site">
+      <a href="/" class="brand">Purelymail Calendar</a>
+      <nav>
+        <a href="/about">About</a>
+        <a href="/about#references">References</a>
+        <a href="/purelymail-calendar-feature">Feature</a>
+        <a href="https://github.com/bhartiyashesh/purelymailcalendar" rel="noopener noreferrer" target="_blank">Source</a>
+        <a href="/" class="cta">Sign in</a>
+      </nav>
+    </header>
+
+    <main>
+      <p class="eyebrow">Docs</p>
+      <h1>Connect Purelymail CalDAV to Apple Calendar</h1>
+
+      <div class="answer-block">
+        <p>
+          Purelymail supports CalDAV at <code>https://purelymail.com/webdav/</code>. To
+          connect Apple Calendar on macOS or iOS, add an <strong>Other CalDAV
+          Account</strong> using your Purelymail email and password as credentials,
+          with server hostname <code>purelymail.com</code> and the WebDAV path
+          <code>/webdav/</code>. Apple Calendar then handles event sync.
+        </p>
+        <p>
+          For meeting invites and RSVP tracking on top of that CalDAV calendar,
+          <strong>Purelymail Calendar</strong> is the unofficial open-source web
+          companion app you can sign in to with the same mailbox.
+        </p>
+      </div>
+
+      <h2>The connection.</h2>
+      <div class="flow">
+        <div class="flow-row">
+          <div class="flow-node">
+            <div class="node-label">Apple Calendar</div>
+            macOS or iOS native app.
+          </div>
+          <div class="flow-arrow" aria-hidden>&rarr;</div>
+          <div class="flow-node">
+            <div class="node-label">HTTPS (443)</div>
+            CalDAV verbs: PROPFIND, REPORT, GET, PUT, DELETE.
+          </div>
+          <div class="flow-arrow" aria-hidden>&rarr;</div>
+          <div class="flow-node">
+            <div class="node-label">Purelymail</div>
+            <code>purelymail.com/webdav/</code> stores VEVENTs.
+          </div>
+        </div>
+        <p class="flow-caption">
+          Apple Calendar speaks CalDAV directly. There is no middleware between the
+          device and Purelymail.
+        </p>
+      </div>
+
+      <h2>Apple Calendar settings.</h2>
+      <table class="compare">
+        <thead>
+          <tr>
+            <th scope="col">Setting</th>
+            <th scope="col">Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Account type</th>
+            <td>Other CalDAV Account / Manual.</td>
+          </tr>
+          <tr>
+            <th scope="row">Username</th>
+            <td>Your full Purelymail email (for example <code>you@yourdomain.com</code>).</td>
+          </tr>
+          <tr>
+            <th scope="row">Password</th>
+            <td>Your Purelymail password (or an app-specific password if you use 2FA).</td>
+          </tr>
+          <tr>
+            <th scope="row">Server address</th>
+            <td><code>purelymail.com</code></td>
+          </tr>
+          <tr>
+            <th scope="row">Server path</th>
+            <td><code>/webdav/</code></td>
+          </tr>
+          <tr>
+            <th scope="row">Port</th>
+            <td>443 (SSL on)</td>
+          </tr>
+          <tr>
+            <th scope="row">Description</th>
+            <td>Anything you like (for example <code>Purelymail</code>).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Step by step on macOS.</h2>
+      <ol class="steps">
+        <li>Open <strong>Calendar</strong>, then choose <em>Calendar &raquo; Settings &raquo; Accounts</em>.</li>
+        <li>Click <strong>+</strong>, pick <em>Other CalDAV Account</em>, click <em>Continue</em>.</li>
+        <li>Account Type: <em>Manual</em>.</li>
+        <li>Username: your full Purelymail email. Password: your Purelymail password.</li>
+        <li>Server Address: <code>purelymail.com/webdav/</code>.</li>
+        <li>Click <em>Sign In</em>. Apple Calendar discovers your calendar collections via PROPFIND and shows them in the sidebar.</li>
+      </ol>
+
+      <h2>Step by step on iOS.</h2>
+      <ol class="steps">
+        <li>Open <strong>Settings &raquo; Calendar &raquo; Accounts &raquo; Add Account &raquo; Other</strong>.</li>
+        <li>Tap <em>Add CalDAV Account</em>.</li>
+        <li>Server: <code>purelymail.com</code>.</li>
+        <li>User Name: your full Purelymail email. Password: your Purelymail password.</li>
+        <li>Description: <code>Purelymail</code>. Tap <em>Next</em>.</li>
+        <li>iOS validates the account and adds the calendars to the native Calendar app.</li>
+      </ol>
+
+      <h2>Common gotchas.</h2>
+      <h3>"The account could not be found"</h3>
+      <p>
+        Apple Calendar tries auto-discovery from the bare hostname first. If that
+        fails, set Account Type to <em>Manual</em> and provide both the hostname
+        (<code>purelymail.com</code>) and the path (<code>/webdav/</code>) explicitly.
+        Per
+        <a href="https://purelymail.com/docs/caldav" rel="noopener noreferrer" target="_blank">Purelymail's CalDAV docs</a>,
+        the WebDAV root is required.
+      </p>
+      <h3>"Authentication failed" with the right password</h3>
+      <p>
+        Two-factor authentication on Purelymail blocks plain-password CalDAV logins.
+        Generate an app-specific password from the Purelymail account settings and
+        use that instead.
+      </p>
+      <h3>Multiple Purelymail accounts</h3>
+      <p>
+        Each Purelymail account has its own WebDAV directory under
+        <code>/webdav/</code>. Apple Calendar discovers the right one from the
+        authenticated user, so you do not have to specify an account ID manually.
+      </p>
+
+      <h2>Apple Calendar handles sync. What is still missing.</h2>
+      <p>
+        Once connected, Apple Calendar reads and writes events directly to
+        Purelymail's CalDAV. What it does not do for Purelymail mailboxes is send
+        standards-compliant iTIP meeting invites in the way Gmail or Outlook expect,
+        or pull inbound invites from your Purelymail inbox into the calendar.
+      </p>
+      <p>
+        That gap is what <a href="/">Purelymail Calendar</a> fills. The two work
+        together: Apple Calendar for native device sync, Purelymail Calendar for
+        scheduling and inbox-to-calendar sync.
+      </p>
+
+      <h2>Where to go next.</h2>
+      <ul class="links">
+        <li>
+          <a href="https://purelymail.com/docs/caldav" rel="noopener noreferrer" target="_blank">Purelymail's official CalDAV documentation</a>
+          covers the underlying CalDAV server.
+        </li>
+        <li>
+          <a href="/docs/send-meeting-invites-with-purelymail">Send meeting invites with Purelymail</a>:
+          the iTIP/iMIP flow that Apple Calendar does not automate for Purelymail.
+        </li>
+        <li>
+          <a href="/docs/purelymail-caldav-rsvp-tracking">RSVP tracking</a>: how
+          attendee replies flow back into the CalDAV event.
+        </li>
+        <li>
+          <a href="/purelymail-calendar-feature">Feature comparison</a>: what
+          Purelymail provides natively vs. what this app adds.
+        </li>
+        <li>
+          <a href="https://github.com/bhartiyashesh/purelymailcalendar" rel="noopener noreferrer" target="_blank">Source on GitHub</a>
+          (MIT licensed).
+        </li>
+        <li>
+          <a href="/about">About Purelymail Calendar</a>: credential handling and
+          where your data lives.
+        </li>
+      </ul>
+
+      <div class="ready">
+        <a href="/">Sign in to Purelymail Calendar &nbsp;&rarr;</a>
+      </div>
+    </main>
+
+    <footer class="site">
+      <p class="colophon">
+        <strong>Unofficial companion app.</strong> Purelymail Calendar is an
+        independent, open-source project for Purelymail mailbox users. Events live on
+        Purelymail's CalDAV servers; this app is the scheduling interface around them.
+      </p>
+      <p class="small">
+        Purelymail Calendar is not affiliated with, endorsed by, or sponsored by
+        Purelymail. Apple Calendar, macOS, and iOS are trademarks of Apple Inc.
+        Made by
+        <a href="https://yasheshbharti.com" rel="noopener noreferrer" target="_blank">Yashesh Bharti</a>.
+        <a href="https://github.com/bhartiyashesh/purelymailcalendar" rel="noopener noreferrer" target="_blank">Source on GitHub</a>.
+      </p>
+    </footer>
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-06E18161QX"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-06E18161QX');
+    </script>
+  </body>
+</html>
