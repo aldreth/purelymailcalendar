@@ -4,6 +4,12 @@
 
 ![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688) ![React](https://img.shields.io/badge/frontend-React%20%2B%20Vite-61dafb) ![Postgres](https://img.shields.io/badge/db-Postgres-336791)
 
+
+https://github.com/user-attachments/assets/624a75c4-c0c9-455a-b87d-88cb392d0a5e
+
+
+
+
 Purelymail is a great email host, but its calendar story is bare-bones — you can store events over CalDAV, but it doesn't ship an iMIP/iTIP scheduler, so sending real meeting invites and tracking RSVPs is missing. **Purelymail Calendar** fills that gap.
 
 Sign in with a magic link, connect your Purelymail mailbox once, and you get:
