@@ -571,6 +571,7 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
       location: e.location,
       description: e.description,
       attendees: e.attendees.map((a) => ({ email: a.email, name: a.name || undefined })),
+      bcc_invites: !!e.bcc_invites,
       uid: e.uid,
       sequence: e.sequence + 1,
     };
@@ -603,6 +604,7 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
       location: e.location,
       description: e.description,
       attendees: e.attendees.map((a) => ({ email: a.email, name: a.name || undefined })),
+      bcc_invites: !!e.bcc_invites,
       uid: e.master_uid || e.uid,
       sequence: e.sequence + 1,
     };
@@ -1191,6 +1193,7 @@ function buildOptimisticEvent(payload: EventIn, uid: string, me: Me): EventOut {
     location: payload.location || "",
     description: payload.description || "",
     sequence: payload.sequence ?? 0,
+    bcc_invites: !!payload.bcc_invites,
     organizer: { email: me.email, name: me.display_name || me.email },
     attendees: (payload.attendees || []).map((a) => ({
       email: a.email,
