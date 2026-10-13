@@ -120,12 +120,15 @@ class EventOut(BaseModel):
 class CreateEventResponse(BaseModel):
     uid: str
     sent_to: List[str]
+    # Guests whose invite could not be delivered. The event is still saved.
+    failed_to: List[str] = []
     dry_run: bool
 
 
 class CancelEventResponse(BaseModel):
     uid: str
     sent_to: List[str]
+    failed_to: List[str] = []
 
 
 class RsvpResultOut(BaseModel):

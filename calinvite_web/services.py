@@ -516,16 +516,30 @@ def _default_body(spec: EventSpec, lead: str) -> str:
     return "\n".join(lines)
 
 
-def _deliver_invite(
+def _guest_recipients(spec: EventSpec, organizer_email: str) -> List[str]:
+    """Attendee addresses except the organizer, deduped case-insensitively."""
+    seen: set[str] = set()
+    out: List[str] = []
+    for attendee in spec.attendees:
+        email = (attendee.email or "").strip()
+        key = email.lower()
+        if not email or key == organizer_email or key in seen:
+            continue
+        seen.add(key)
+        out.append(email)
+    return out
+
+
+def _invite_message(
     creds: MailboxCreds,
     spec: EventSpec,
     body: str,
     ics_bytes: bytes,
     method: str,
     to: List[str],
-) -> None:
+):
     subject_prefix = {"REQUEST": "Invitation", "CANCEL": "Cancelled"}.get(method, "Update")
-    msg = mailer.build_message(
+    return mailer.build_message(
         from_email=creds.email,
         from_name=creds.display_name,
         to_addrs=to,
@@ -533,14 +547,6 @@ def _deliver_invite(
         body_text=body,
         ics_bytes=ics_bytes,
         method=method,
-    )
-    mailer.send(
-        smtp_host=creds.smtp_host,
-        smtp_port=creds.smtp_port,
-        smtp_user=creds.email,
-        smtp_pass=creds.password,
-        msg=msg,
-        to_addrs=to,
     )
 
 
@@ -552,27 +558,54 @@ def _send_invite(
     method: str,
     *,
     bcc_invites: bool = False,
-) -> List[str]:
-    # Exclude the organizer themselves from the recipient list; they're listed
-    # as an ATTENDEE on the event for CalDAV scheduling but shouldn't get
-    # emailed an invite to their own event.
-    organizer_email = creds.email.lower().strip()
-    to = [a.email for a in spec.attendees if a.email.lower().strip() != organizer_email]
-    if not to:
-        return []
-    if not bcc_invites:
-        _deliver_invite(creds, spec, body, ics_bytes, method, to)
-        return to
+) -> tuple[List[str], List[str]]:
+    """Email the invite. Returns (delivered, failed).
 
-    # One message per guest. The shared CalDAV copy keeps the full list;
-    # each outbound .ics names only the organizer and that guest, so the
-    # guest list is not in the headers or the calendar attachment.
-    sent: List[str] = []
-    for email in to:
-        personal = ics_for_recipient(ics_bytes, email, spec.organizer_email)
-        _deliver_invite(creds, spec, body, personal, method, [email])
-        sent.append(email)
-    return sent
+    The organizer is listed as an ATTENDEE for CalDAV scheduling but is not
+    emailed an invite to their own event. When `bcc_invites` is set, each
+    guest gets their own message on one SMTP session. A failure for one
+    guest does not stop the others.
+    """
+    organizer_email = creds.email.lower().strip()
+    to = _guest_recipients(spec, organizer_email)
+    if not to:
+        return [], []
+
+    if bcc_invites:
+        # The shared CalDAV copy keeps the full list. Each outbound .ics
+        # names only the organizer and that guest.
+        deliveries = [
+            (
+                _invite_message(
+                    creds,
+                    spec,
+                    body,
+                    ics_for_recipient(ics_bytes, email, spec.organizer_email),
+                    method,
+                    [email],
+                ),
+                [email],
+            )
+            for email in to
+        ]
+    else:
+        deliveries = [(_invite_message(creds, spec, body, ics_bytes, method, to), to)]
+
+    failed_pairs = mailer.send_all(
+        smtp_host=creds.smtp_host,
+        smtp_port=creds.smtp_port,
+        smtp_user=creds.email,
+        smtp_pass=creds.password,
+        deliveries=deliveries,
+    )
+    if failed_pairs and not bcc_invites:
+        raise failed_pairs[0][1]
+    failed_keys = {addr.lower() for addr, _ in failed_pairs}
+    for addr, err in failed_pairs:
+        print(f"[invite] send failed for {addr}: {err}", flush=True)
+    sent = [email for email in to if email.lower() not in failed_keys]
+    failed = [email for email in to if email.lower() in failed_keys]
+    return sent, failed
 
 
 def _schedule_email_reminders(
@@ -620,12 +653,13 @@ def create_event(
     _schedule_email_reminders(user_id, mailbox_id, uid, spec, inp)
 
     sent: List[str] = []
+    failed: List[str] = []
     if not inp.dry_run:
         body = _default_body(spec, "You're invited.")
-        sent = _send_invite(
+        sent, failed = _send_invite(
             creds, spec, body, ics_bytes, method="REQUEST", bcc_invites=spec.bcc_invites
         )
-    return CreateEventResponse(uid=uid, sent_to=sent, dry_run=inp.dry_run)
+    return CreateEventResponse(uid=uid, sent_to=sent, failed_to=failed, dry_run=inp.dry_run)
 
 
 def update_event(
@@ -651,12 +685,13 @@ def update_event(
     _schedule_email_reminders(user_id, mailbox_id, uid_out, spec, inp)
 
     sent: List[str] = []
+    failed: List[str] = []
     if not inp.dry_run:
         body = _default_body(spec, "This invitation has been updated.")
-        sent = _send_invite(
+        sent, failed = _send_invite(
             creds, spec, body, ics_bytes, method="REQUEST", bcc_invites=spec.bcc_invites
         )
-    return CreateEventResponse(uid=uid_out, sent_to=sent, dry_run=inp.dry_run)
+    return CreateEventResponse(uid=uid_out, sent_to=sent, failed_to=failed, dry_run=inp.dry_run)
 
 
 def cancel_event(
@@ -692,12 +727,13 @@ def cancel_event(
             print(f"[reminders] cancel failed for {uid_out}: {e}")
 
     sent: List[str] = []
+    failed: List[str] = []
     if not inp.dry_run:
         body = _default_body(spec, "This event has been cancelled.")
-        sent = _send_invite(
+        sent, failed = _send_invite(
             creds, spec, body, ics_bytes, method="CANCEL", bcc_invites=spec.bcc_invites
         )
-    return CreateEventResponse(uid=uid_out, sent_to=sent, dry_run=inp.dry_run)
+    return CreateEventResponse(uid=uid_out, sent_to=sent, failed_to=failed, dry_run=inp.dry_run)
 
 
 def cancel_occurrence(

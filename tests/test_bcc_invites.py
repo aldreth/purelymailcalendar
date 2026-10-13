@@ -61,10 +61,12 @@ def _patch_transport(monkeypatch):
         "calinvite_web.services.cdav.put_event",
         lambda calendar, ics: stored.__setitem__("ics", ics),
     )
-    monkeypatch.setattr(
-        "calinvite_web.services.mailer.send",
-        lambda **kwargs: sent.append(kwargs),
-    )
+    def _capture(**kwargs):
+        for msg, addrs in kwargs["deliveries"]:
+            sent.append({"msg": msg, "to_addrs": list(addrs)})
+        return []
+
+    monkeypatch.setattr("calinvite_web.services.mailer.send_all", _capture)
     return stored, sent
 
 
@@ -140,10 +142,12 @@ def test_bcc_invite_sends_one_private_message_per_guest(monkeypatch):
 
 def test_personal_cancel_keeps_recurrence_id(monkeypatch):
     sent: list = []
-    monkeypatch.setattr(
-        "calinvite_web.services.mailer.send",
-        lambda **kwargs: sent.append(kwargs),
-    )
+    def _capture(**kwargs):
+        for msg, addrs in kwargs["deliveries"]:
+            sent.append({"msg": msg, "to_addrs": list(addrs)})
+        return []
+
+    monkeypatch.setattr("calinvite_web.services.mailer.send_all", _capture)
     start = datetime(2026, 6, 1, 10, 0, tzinfo=ZoneInfo("UTC"))
     spec = EventSpec(
         summary="Town hall",
@@ -175,7 +179,7 @@ def test_personal_cancel_keeps_recurrence_id(monkeypatch):
         ev.add("attendee", addr, encode=0)
     cal.add_component(ev)
 
-    sent_to = _send_invite(
+    sent_to, failed = _send_invite(
         _creds(),
         spec,
         "cancelled",
@@ -184,6 +188,7 @@ def test_personal_cancel_keeps_recurrence_id(monkeypatch):
         bcc_invites=True,
     )
     assert sent_to == ["ada@example.com", "grace@example.com"]
+    assert failed == []
     assert len(sent) == 2
     for item in sent:
         text = _calendar_text(item["msg"])
@@ -214,6 +219,12 @@ def test_ics_for_recipient_drops_other_email_alarm_recipients():
                 description="Email",
                 recipients=["ada@example.com", "grace@example.com"],
             ),
+            Alarm(
+                action="EMAIL",
+                minutes_before=30,
+                description="Grace only",
+                recipients=["grace@example.com"],
+            ),
         ],
         tz="UTC",
         uid="town-hall@calinvite",
@@ -227,3 +238,164 @@ def test_ics_for_recipient_drops_other_email_alarm_recipients():
     assert "grace@example.com" not in text
     assert "DISPLAY" in text
     assert b"X-CALINVITE-BCC" in full
+    personal_cal = ICalendar.from_ical(personal)
+    email_alarms = [
+        alarm
+        for alarm in personal_cal.walk("VALARM")
+        if str(alarm.get("action") or "").upper() == "EMAIL"
+    ]
+    assert len(email_alarms) == 1
+    assert email_alarms[0].get("attendee") is not None
+
+
+def test_bcc_dedupes_addresses_ignoring_case(monkeypatch):
+    sent: list = []
+
+    def _capture(**kwargs):
+        for _msg, addrs in kwargs["deliveries"]:
+            sent.append(list(addrs))
+        return []
+
+    monkeypatch.setattr("calinvite_web.services.mailer.send_all", _capture)
+    spec = EventSpec(
+        summary="Town hall",
+        start=datetime(2026, 6, 1, 10, 0, tzinfo=ZoneInfo("UTC")),
+        end=datetime(2026, 6, 1, 11, 0, tzinfo=ZoneInfo("UTC")),
+        organizer_email="host@example.com",
+        organizer_name="Host",
+        attendees=[
+            Attendee(email="Ada@example.com", name="Ada"),
+            Attendee(email="ada@example.com", name="Ada again"),
+            Attendee(email="grace@example.com", name="Grace"),
+        ],
+        tz="UTC",
+        uid="dedupe@calinvite",
+        bcc_invites=True,
+    )
+    ics, _ = build_request(spec)
+    sent_to, failed = _send_invite(_creds(), spec, "invited", ics, method="REQUEST", bcc_invites=True)
+    assert sent == [["Ada@example.com"], ["grace@example.com"]]
+    assert sent_to == ["Ada@example.com", "grace@example.com"]
+    assert failed == []
+
+
+def test_bcc_send_continues_when_one_guest_fails(monkeypatch):
+    stored, sent = _patch_transport(monkeypatch)
+
+    def _capture(**kwargs):
+        failed = []
+        for msg, addrs in kwargs["deliveries"]:
+            if list(addrs) == ["grace@example.com"]:
+                failed.append(("grace@example.com", RuntimeError("rejected")))
+            else:
+                sent.append({"msg": msg, "to_addrs": list(addrs)})
+        return failed
+
+    monkeypatch.setattr("calinvite_web.services.mailer.send_all", _capture)
+    result = create_event(_creds(), _event(bcc=True))
+    assert result.sent_to == ["ada@example.com"]
+    assert result.failed_to == ["grace@example.com"]
+    assert [item["to_addrs"] for item in sent] == [["ada@example.com"]]
+    assert b"X-CALINVITE-BCC" in stored["ics"]
+
+
+def test_send_all_uses_one_session_and_continues(monkeypatch):
+    import calinvite.mailer as mailer_mod
+    from calinvite import mailer
+
+    class FakeSMTP:
+        instances: list = []
+
+        def __init__(self, *args, **kwargs):
+            FakeSMTP.instances.append(self)
+            self.sent: list = []
+
+        def login(self, *args):
+            return None
+
+        def send_message(self, msg, from_addr=None, to_addrs=None):
+            if to_addrs == ["bad@example.com"]:
+                raise RuntimeError("rejected")
+            self.sent.append(list(to_addrs))
+
+        def quit(self):
+            return None
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(mailer_mod.smtplib, "SMTP_SSL", FakeSMTP)
+    msg = mailer.build_message(
+        from_email="host@example.com",
+        from_name="Host",
+        to_addrs=["ada@example.com"],
+        subject="Invitation: Town hall",
+        body_text="You're invited.",
+        ics_bytes=b"BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n",
+        method="REQUEST",
+    )
+    failed = mailer.send_all(
+        smtp_host="smtp.example",
+        smtp_port=465,
+        smtp_user="host@example.com",
+        smtp_pass="secret",
+        deliveries=[
+            (msg, ["ada@example.com"]),
+            (msg, ["bad@example.com"]),
+            (msg, ["grace@example.com"]),
+        ],
+    )
+    assert len(FakeSMTP.instances) == 1
+    assert FakeSMTP.instances[0].sent == [["ada@example.com"], ["grace@example.com"]]
+    assert [addr for addr, _err in failed] == ["bad@example.com"]
+
+
+def test_bcc_reminder_hides_guest_list_and_organizer_links(monkeypatch):
+    from calinvite_web.models import Mailbox, ScheduledReminder
+    from calinvite_web.reminders import _send_one
+
+    captured: list = []
+
+    def fake_send_all(**kwargs):
+        captured.append(kwargs)
+        return []
+
+    monkeypatch.setattr("calinvite_web.reminders.mailer.send_all", fake_send_all)
+    monkeypatch.setattr("calinvite_web.reminders.decrypt", lambda token: "pw")
+    mailbox = Mailbox(
+        user_id=1,
+        email="host@example.com",
+        display_name="Host",
+        account_id="1",
+        encrypted_password="x",
+        smtp_host="smtp.example",
+        smtp_port=465,
+    )
+    reminder = ScheduledReminder(
+        user_id=1,
+        event_uid="town-hall",
+        event_summary="Town hall",
+        event_start=datetime(2026, 6, 1, 10, 0),
+        occurrence_start=datetime(2026, 6, 1, 10, 0),
+        fire_at=datetime(2026, 6, 1, 9, 45),
+        minutes_before=15,
+        recipients_json='["ada@example.com", "Ada@example.com", "grace@example.com"]',
+        confirm_token="tok",
+        bcc_invites=True,
+    )
+    _send_one(mailbox, reminder)
+    assert len(captured) == 1
+    deliveries = captured[0]["deliveries"]
+    tos = [list(addrs) for _msg, addrs in deliveries]
+    assert tos == [["ada@example.com"], ["grace@example.com"], ["host@example.com"]]
+    for msg, addrs in deliveries:
+        body = msg.get_body(preferencelist=("plain",)).get_content()
+        if list(addrs) == ["host@example.com"]:
+            assert "Confirm:" in body
+            assert "ada@example.com" not in body
+            assert "grace@example.com" not in body
+        else:
+            assert "Cancel this occurrence" not in body
+            other = "grace@example.com" if list(addrs) == ["ada@example.com"] else "ada@example.com"
+            assert other not in body
+            assert other not in msg["To"]

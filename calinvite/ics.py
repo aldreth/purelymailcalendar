@@ -128,8 +128,10 @@ def ics_for_recipient(ics_bytes: bytes, recipient_email: str, organizer_email: s
     """Copy an iTIP payload so the guest cannot see the rest of the guest list.
 
     VEVENT ATTENDEE rows are limited to the organizer and this recipient.
-    EMAIL VALARM recipients other than this recipient are removed. DISPLAY
-    alarms are left alone. RECURRENCE-ID and the rest of the event stay put.
+    EMAIL VALARMs keep only this recipient. An EMAIL alarm with nobody left
+    is removed, because RFC 5545 requires an ATTENDEE on those alarms.
+    DISPLAY alarms are left alone. RECURRENCE-ID and the rest of the event
+    stay put.
     """
     cal = Calendar.from_ical(ics_bytes)
     keep = {recipient_email.lower().strip(), organizer_email.lower().strip()}
@@ -137,13 +139,18 @@ def ics_for_recipient(ics_bytes: bytes, recipient_email: str, organizer_email: s
     for comp in cal.walk("VEVENT"):
         kept = [a for a in _as_list(comp.get("attendee")) if _mailto_email(a).lower() in keep]
         _replace_attendees(comp, kept)
-        for alarm in comp.walk("VALARM"):
+        for alarm in list(comp.subcomponents):
+            if getattr(alarm, "name", None) != "VALARM":
+                continue
             if str(alarm.get("action") or "").upper() != "EMAIL":
                 continue
             alarm_kept = [
                 a for a in _as_list(alarm.get("attendee")) if _mailto_email(a).lower() == guest
             ]
-            _replace_attendees(alarm, alarm_kept)
+            if not alarm_kept:
+                comp.subcomponents.remove(alarm)
+            else:
+                _replace_attendees(alarm, alarm_kept)
     return cal.to_ical()
 
 

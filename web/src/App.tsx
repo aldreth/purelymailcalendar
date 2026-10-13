@@ -582,10 +582,7 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
       const optimistic = buildOptimisticEvent(body, r.uid, me);
       markPending(optimistic);
       setEvents((prev) => upsertEvent(prev, optimistic));
-      pushToast(
-        "success",
-        r.sent_to.length ? `Moved. Update sent to ${r.sent_to.length}.` : "Moved."
-      );
+      pushToast("success", deliveryNote(r, `Moved. Update sent to ${r.sent_to.length}.`, "Moved."));
       refreshEvents();
     } catch (err: any) {
       pushToast("error", err?.message || "move failed");
@@ -619,9 +616,11 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
       setEvents((prev) => prev.filter((x) => (x.master_uid || x.uid) !== masterUid));
       pushToast(
         "success",
-        res.sent_to.length
-          ? `Cancelled. Notified ${res.sent_to.length} attendee${res.sent_to.length === 1 ? "" : "s"}.`
-          : "Cancelled."
+        deliveryNote(
+          res,
+          `Cancelled. Notified ${res.sent_to.length} attendee${res.sent_to.length === 1 ? "" : "s"}.`,
+          "Cancelled.",
+        ),
       );
       refreshEvents();
     } catch (err: any) {
@@ -677,9 +676,11 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
         "success",
         r.dry_run
           ? `Created (dry run). UID ${r.uid.slice(0, 16)}…`
-          : r.sent_to.length
-          ? `Sent invite to ${r.sent_to.length} attendee${r.sent_to.length === 1 ? "" : "s"}.`
-          : `Created. UID ${r.uid.slice(0, 16)}…`
+          : deliveryNote(
+              r,
+              `Sent invite to ${r.sent_to.length} attendee${r.sent_to.length === 1 ? "" : "s"}.`,
+              `Created. UID ${r.uid.slice(0, 16)}…`,
+            ),
       );
       // If this create was triggered from a task, stamp the resulting
       // event UID on the task so it stops appearing in the Tasks list.
@@ -720,9 +721,11 @@ function AuthedApp({ me, onSignOut, onAuthLost }: { me: Me; onSignOut: () => voi
         "success",
         r.dry_run
           ? `Updated (dry run).`
-          : r.sent_to.length
-          ? `Update sent to ${r.sent_to.length} attendee${r.sent_to.length === 1 ? "" : "s"}.`
-          : `Updated.`
+          : deliveryNote(
+              r,
+              `Update sent to ${r.sent_to.length} attendee${r.sent_to.length === 1 ? "" : "s"}.`,
+              "Updated.",
+            ),
       );
       if (!r.dry_run && payload.attendees && payload.attendees.length > 0) {
         api
@@ -1154,6 +1157,18 @@ function defaultTomorrowMorning(): Date {
   d.setDate(d.getDate() + 1);
   d.setHours(9, 0, 0, 0);
   return d;
+}
+
+function deliveryNote(
+  r: { sent_to: string[]; failed_to?: string[] },
+  sentText: string,
+  noneText: string,
+): string {
+  const failed = r.failed_to ?? [];
+  if (r.sent_to.length && failed.length) return `${sentText} Could not reach ${failed.join(", ")}.`;
+  if (failed.length) return `Could not reach ${failed.join(", ")}.`;
+  if (r.sent_to.length) return sentText;
+  return noneText;
 }
 
 function toLocalIsoMinute(d: Date): string {

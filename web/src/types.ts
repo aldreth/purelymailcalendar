@@ -126,12 +126,14 @@ export type EventIn = {
 export type CreateEventResponse = {
   uid: string;
   sent_to: string[];
+  failed_to?: string[];
   dry_run: boolean;
 };
 
 export type CancelEventResponse = {
   uid: string;
   sent_to: string[];
+  failed_to?: string[];
 };
 
 export type RsvpResultOut = {
